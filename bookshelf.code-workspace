@@ -1,0 +1,19 @@
+{
+	"folders": [
+		{
+			"name": "backend",
+			"path": "src-tauri"
+		},
+		{
+			"name": "frontend",
+			"path": "src"
+		},
+		{
+			"name": "bookshelf",
+			"path": "."
+		}
+	],
+	"settings": {
+		"typescript.tsdk": "node_modules/typescript/lib"
+	}
+}
