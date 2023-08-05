@@ -2,14 +2,17 @@
 
 // Remove as soon implementation is done
 use chrono::{DateTime, Utc};
+use std::marker::PhantomData;
 #[allow(dead_code)]
 use std::{error::Error, fmt::Display};
 
-// All known error for the books module.
+/// All known error for the books module.
 
 #[derive(Debug, PartialEq)]
 pub enum BookError {
+    /// A generic error of the books modul.
     Generic(String),
+    /// Error is returned if no item with given id were found.
     NotFound(i64),
 }
 
@@ -47,6 +50,7 @@ impl From<&str> for SortOrder {
 }
 
 /// SortDescriptor describes a column and which sort order to use.
+#[derive(Debug)]
 pub struct SortDescriptor(String, SortOrder);
 
 /// StoreResult a generic store result.
@@ -56,10 +60,64 @@ pub struct StoreResult<T> {
     items: Vec<T>,
 }
 
-pub struct SearchConfig {
+pub struct ConfigNew;
+pub struct ConfigInitialized;
+
+/**
+Configuration for searching in the BookDB.
+
+This struct and it's logic might be a little bit complex (Builder Pattern) for
+its purpose, but this project is also a playground for learning rust.
+*/
+#[derive(Debug)]
+pub struct SearchConfig<State = ConfigNew> {    
+    state: PhantomData<State>,
     skip: Option<u64>,
-    sort: Option<Vec<SortDescriptor>>
+    sort: Option<Vec<SortDescriptor>>,
+    take: Option<u64>,
+    text: String,
 }
+
+impl SearchConfig<ConfigNew> {
+    pub fn new(txt: &str) -> SearchConfig<ConfigNew> {
+        Self {
+            state: PhantomData::<ConfigNew>,
+            take: None,
+            text: txt.to_owned(),
+            skip: None,
+            sort: None,
+        }
+    }
+
+    pub fn build(self) -> SearchConfig<ConfigInitialized> {
+        self.transition()
+    } 
+
+    pub fn use_skip(mut self, skip: u64) -> Self {
+        self.skip = Some(skip);
+        self
+    }
+
+    pub fn use_take(mut self, take: u64) -> Self {
+        self.take = Some(take);
+        self
+    }
+
+    pub fn use_sort(mut self, sort: Vec<SortDescriptor>) -> Self {
+        self.sort = Some(sort);
+        self        
+    }
+
+}
+
+impl<S> SearchConfig<S> {
+    fn transition<D>(self) -> SearchConfig<D> {
+        let SearchConfig { skip, take, sort, text, state: _ } = self;
+        SearchConfig { skip, take, sort, text, state: PhantomData }
+    }
+}
+
+
 
 /// BookDB provides functions to store and retrieve books from the underlying data store.
 pub trait BookDB {
@@ -67,9 +125,9 @@ pub trait BookDB {
     fn update_book(book: &mut Book) -> Result<(), BookError>;
     fn delete_book(book: &Book) -> Result<(), BookError>;
     fn delete_book_by_id(id: i64) -> Result<(), BookError>;
-    fn fetch_books(search: &str) -> Result<StoreResult<Book>, BookError>;
+    fn fetch_books(search: &SearchConfig) -> Result<StoreResult<Book>, BookError>;
 
-    fn get_tags() -> Result<StoreResult<Tag>, BookError>;
+    fn get_tags(pattern: &str) -> Result<StoreResult<Tag>, BookError>;
 }
 
 /// A book representation for the bookshelf application.
@@ -102,9 +160,11 @@ pub struct Tag {
 
 #[cfg(test)]
 mod tests {
-    use crate::books::models::SortOrder;
+    use crate::books::models::{SearchConfig, SortOrder};
 
-    // This test is only to get familiar with Rust testing
+    use super::SortDescriptor;
+
+    // This test is only to get favaluemiliar with Rust testing
     #[test]
     fn test_sort_order_from() {
         assert_eq!(SortOrder::from("any Value"), SortOrder::Asc);
@@ -119,14 +179,15 @@ mod tests {
 
     #[test]
     fn my_test() {
+        let cfg = SearchConfig::new("asdasdasd").use_skip(12).use_sort(vec![SortDescriptor("bal".to_owned(), SortOrder::Asc)]).use_take(21);        
+        //let cfg = SearchConfig::new("asdasdasd").use_skip(12);        
 
-        let myfn = |s: String| println!("intern function {}!", s);
+        println!("Build search config {} {} {}", cfg.text, cfg.skip.unwrap(), cfg.take.unwrap());
+        //println!("Build search config {} {}", cfg.text, cfg.skip.unwrap())   
 
-        let txt = String::from("John");
-
-        myfn(txt.clone());
-        println!("OUTSIDE {}", txt);
+        println!("AGAIN {}", cfg.skip.unwrap());
 
         
+
     }
 }
