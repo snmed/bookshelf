@@ -1,9 +1,16 @@
+// Copyright © 2023 Sandro Dallo
+//
+// Use of this source code is governed by an BSD-style
+// license that can be found in the LICENSE file.
+
 // This file contains all models used for the books module.
+// TODO: Remove after initial implementation is done.
+#![allow(dead_code)]
 
 // Remove as soon implementation is done
 use chrono::{DateTime, Utc};
 use std::marker::PhantomData;
-#[allow(dead_code)]
+
 use std::{error::Error, fmt::Display};
 
 /// All known error for the books module.
@@ -66,7 +73,7 @@ pub struct ConfigInitialized;
 /**
 Configuration for searching in the BookDB.
 
-This struct and it's logic might be a little bit complex (Builder Pattern) for
+This struct and it's logic might be a little bit complex (Builder Pattern + ZST Trait Implementation) for
 its purpose, but this project is also a playground for learning rust.
 */
 #[derive(Debug)]
@@ -90,7 +97,8 @@ impl SearchConfig<ConfigNew> {
     }
 
     pub fn build(self) -> SearchConfig<ConfigInitialized> {
-        self.transition()
+        let SearchConfig { skip, take, sort, text, state: _ } = self;
+        SearchConfig { skip, take, sort, text, state: PhantomData::<ConfigInitialized> }
     } 
 
     pub fn use_skip(mut self, skip: u64) -> Self {
@@ -110,61 +118,52 @@ impl SearchConfig<ConfigNew> {
 
 }
 
-impl<S> SearchConfig<S> {
-    fn transition<D>(self) -> SearchConfig<D> {
-        let SearchConfig { skip, take, sort, text, state: _ } = self;
-        SearchConfig { skip, take, sort, text, state: PhantomData }
-    }
-}
-
-
 
 /// BookDB provides functions to store and retrieve books from the underlying data store.
 pub trait BookDB {
-    fn add_book(book: Book) -> Result<Book, BookError>;
-    fn update_book(book: &mut Book) -> Result<(), BookError>;
-    fn delete_book(book: &Book) -> Result<(), BookError>;
-    fn delete_book_by_id(id: i64) -> Result<(), BookError>;
-    fn fetch_books(search: &SearchConfig) -> Result<StoreResult<Book>, BookError>;
+    fn add_book(&self, book: Book) -> Result<Book, BookError>;
+    fn update_book(&self, book: &mut Book) -> Result<(), BookError>;
+    fn delete_book(&self, book: &Book) -> Result<(), BookError>;
+    fn delete_book_by_id(&self, id: i64) -> Result<(), BookError>;
+    fn fetch_books(&self, search: &SearchConfig) -> Result<StoreResult<Book>, BookError>;
 
-    fn get_tags(pattern: &str) -> Result<StoreResult<Tag>, BookError>;
+    fn get_tags(&self, pattern: &str) -> Result<StoreResult<Tag>, BookError>;
 }
 
 /// A book representation for the bookshelf application.
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct Book {
-    authors: Vec<String>,
-    cover_img: Option<Vec<u8>>,
-    description: Option<String>,
-    isbn: String,
-    lang: String,
-    tags: Option<Vec<Tag>>,
-    title: String,
-    sub_title: Option<String>,
+    pub authors: Vec<String>,
+    pub cover_img: Option<Vec<u8>>,
+    pub description: Option<String>,
+    pub isbn: String,
+    pub lang: String,
+    pub tags: Option<Vec<Tag>>,
+    pub title: String,
+    pub sub_title: Option<String>,
+    pub publisher: Option<String>,
 
     // Required for Database
-    id: i64,
-    created: DateTime<Utc>,
-    updated: DateTime<Utc>,
+    pub id: i64,
+    pub created: DateTime<Utc>,
+    pub updated: DateTime<Utc>,
 }
 
 /// A simple tag.
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct Tag {
-    value: String,
+    pub value: String,
     // Required for Database
-    id: i64,
-    created: DateTime<Utc>,
-    updated: DateTime<Utc>,
+    pub id: i64,
+    pub created: DateTime<Utc>,
+    pub updated: DateTime<Utc>,
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::books::models::{SearchConfig, SortOrder};
+    use super::{SearchConfig, SortOrder, SortDescriptor};
 
-    use super::SortDescriptor;
-
-    // This test is only to get favaluemiliar with Rust testing
+    // This test exists only to get familiar with Rust testing
     #[test]
     fn test_sort_order_from() {
         assert_eq!(SortOrder::from("any Value"), SortOrder::Asc);
@@ -179,15 +178,12 @@ mod tests {
 
     #[test]
     fn my_test() {
-        let cfg = SearchConfig::new("asdasdasd").use_skip(12).use_sort(vec![SortDescriptor("bal".to_owned(), SortOrder::Asc)]).use_take(21);        
+        let cfg = SearchConfig::new("asdasdasd").use_skip(12).use_sort(vec![SortDescriptor("bal".to_owned(), SortOrder::Asc)]).use_take(21).build();        
         //let cfg = SearchConfig::new("asdasdasd").use_skip(12);        
-
+        
         println!("Build search config {} {} {}", cfg.text, cfg.skip.unwrap(), cfg.take.unwrap());
         //println!("Build search config {} {}", cfg.text, cfg.skip.unwrap())   
 
-        println!("AGAIN {}", cfg.skip.unwrap());
-
-        
-
+        println!("AGAIN {} Size: {}", cfg.skip.unwrap(), std::mem::size_of_val(&cfg.state));
     }
 }
