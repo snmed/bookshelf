@@ -15,12 +15,14 @@ use std::{error::Error, fmt::Display};
 
 /// All known error for the books module.
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub enum BookError {
     /// A generic error of the books modul.
     Generic(String),
     /// Error is returned if no item with given id were found.
     NotFound(i64),
+    /// A error returned from the underlying database runtime.
+    DBError(Box<dyn std::error::Error>)
 }
 
 impl Error for BookError {}
@@ -30,6 +32,7 @@ impl Display for BookError {
         match self {
             BookError::Generic(s) => s.fmt(f),
             BookError::NotFound(id) => write!(f, "did not find book with id: {id}"),
+            BookError::DBError(e) => write!(f, "database error: {}", *e),
         }
     }
 }
@@ -77,7 +80,7 @@ This struct and it's logic might be a little bit complex (Builder Pattern + ZST 
 its purpose, but this project is also a playground for learning rust.
 */
 #[derive(Debug)]
-pub struct SearchConfig<State = ConfigNew> {    
+pub struct SearchConfig<State = ConfigNew> {
     state: PhantomData<State>,
     skip: Option<u64>,
     sort: Option<Vec<SortDescriptor>>,
@@ -97,9 +100,21 @@ impl SearchConfig<ConfigNew> {
     }
 
     pub fn build(self) -> SearchConfig<ConfigInitialized> {
-        let SearchConfig { skip, take, sort, text, state: _ } = self;
-        SearchConfig { skip, take, sort, text, state: PhantomData::<ConfigInitialized> }
-    } 
+        let SearchConfig {
+            skip,
+            take,
+            sort,
+            text,
+            state: _,
+        } = self;
+        SearchConfig {
+            skip,
+            take,
+            sort,
+            text,
+            state: PhantomData::<ConfigInitialized>,
+        }
+    }
 
     pub fn use_skip(mut self, skip: u64) -> Self {
         self.skip = Some(skip);
@@ -113,11 +128,9 @@ impl SearchConfig<ConfigNew> {
 
     pub fn use_sort(mut self, sort: Vec<SortDescriptor>) -> Self {
         self.sort = Some(sort);
-        self        
+        self
     }
-
 }
-
 
 /// BookDB provides functions to store and retrieve books from the underlying data store.
 pub trait BookDB {
@@ -127,7 +140,8 @@ pub trait BookDB {
     fn delete_book_by_id(&self, id: i64) -> Result<(), BookError>;
     fn fetch_books(&self, search: &SearchConfig) -> Result<StoreResult<Book>, BookError>;
 
-    fn get_tags(&self, pattern: &str) -> Result<StoreResult<Tag>, BookError>;
+    fn get_tags(&self, pattern: &str) -> Result<StoreResult<String>, BookError>;
+    fn get_authors(&self, search: &SearchConfig) -> Result<StoreResult<String>, BookError>;
 }
 
 /// A book representation for the bookshelf application.
@@ -138,7 +152,7 @@ pub struct Book {
     pub description: Option<String>,
     pub isbn: String,
     pub lang: String,
-    pub tags: Option<Vec<Tag>>,
+    pub tags: Option<Vec<String>>,
     pub title: String,
     pub sub_title: Option<String>,
     pub publisher: Option<String>,
@@ -149,19 +163,10 @@ pub struct Book {
     pub updated: DateTime<Utc>,
 }
 
-/// A simple tag.
-#[derive(Debug, Default, PartialEq, Clone)]
-pub struct Tag {
-    pub value: String,
-    // Required for Database
-    pub id: i64,
-    pub created: DateTime<Utc>,
-    pub updated: DateTime<Utc>,
-}
 
 #[cfg(test)]
 mod tests {
-    use super::{SearchConfig, SortOrder, SortDescriptor};
+    use super::{SearchConfig, SortDescriptor, SortOrder};
 
     // This test exists only to get familiar with Rust testing
     #[test]
@@ -178,12 +183,25 @@ mod tests {
 
     #[test]
     fn my_test() {
-        let cfg = SearchConfig::new("asdasdasd").use_skip(12).use_sort(vec![SortDescriptor("bal".to_owned(), SortOrder::Asc)]).use_take(21).build();        
-        //let cfg = SearchConfig::new("asdasdasd").use_skip(12);        
-        
-        println!("Build search config {} {} {}", cfg.text, cfg.skip.unwrap(), cfg.take.unwrap());
-        //println!("Build search config {} {}", cfg.text, cfg.skip.unwrap())   
+        let cfg = SearchConfig::new("")
+            .use_skip(12)
+            .use_sort(vec![SortDescriptor("bal".to_owned(), SortOrder::Asc)])
+            .use_take(21)
+            .build();
+        //let cfg = SearchConfig::new("asdasdasd").use_skip(12);
 
-        println!("AGAIN {} Size: {}", cfg.skip.unwrap(), std::mem::size_of_val(&cfg.state));
+        println!(
+            "Build search config {} {} {}",
+            cfg.text,
+            cfg.skip.unwrap(),
+            cfg.take.unwrap()
+        );
+        //println!("Build search config {} {}", cfg.text, cfg.skip.unwrap())
+
+        println!(
+            "AGAIN {} Size: {}",
+            cfg.skip.unwrap(),
+            std::mem::size_of_val(&cfg.state)
+        );
     }
 }

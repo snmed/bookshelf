@@ -20,8 +20,8 @@
 			{
 				"previewLimit": 50,
 				"driver": "SQLite",
-				"name": "TestBla",
-				"database": "${workspaceFolder:backend}/bla.db"
+				"name": "MyTestDB",
+				"database": "${workspaceFolder:backend}/MyTestDB.db"
 			}
 		]
 	}
