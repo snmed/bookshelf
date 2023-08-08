@@ -3,9 +3,39 @@
 // Use of this source code is governed by an BSD-style
 // license that can be found in the LICENSE file.
 
+use rusqlite::Connection;
+use rusqlite_migration::{Migrations, M};
+
 use super::models::{Book, BookDB, BookError, SearchConfig, StoreResult};
 
-fn create() {}
+
+/// Opens or creates a new books database and returns it.
+pub fn open_connection(db_file: &str) -> Result<Connection, BookError> {
+    // Add all required sql scripts to the migrator
+    let mut scripts = vec![M::up(include_str!("scripts/init.sql"))];
+
+    // Add only for debug mode dummy data
+    if cfg!(debug_assertions) {
+        scripts.push(M::up(include_str!("scripts/dummy_data.sql")));
+    }
+
+    let mut conn = create_connection(db_file)?;
+    let migrations = Migrations::new(scripts);
+
+    migrations.to_latest(&mut conn)?;    
+
+    Ok(conn)
+}
+
+#[cfg(debug_assertions)]
+fn create_connection(_: &str) -> Result<Connection, BookError> {
+    Ok(Connection::open_in_memory()?)
+}
+
+#[cfg(not(debug_assertions))]
+fn create_connection(db_file: &str) -> Result<Connection, BookError> {
+    Ok(Connection::open(db_file)?)
+}
 
 pub struct SqliteStore {}
 
@@ -41,19 +71,27 @@ impl BookDB for SqliteStore {
 
 impl From<rusqlite::Error> for BookError {
     fn from(value: rusqlite::Error) -> Self {
-        // Todo: If necessary transform errors into database agnostic errrors.
+        // Todo: If necessary transform [rusqlite::Error] errors into database agnostic errors.
+        BookError::DBError(value.into())
+    }
+}
+
+impl From<rusqlite_migration::Error> for BookError {
+    fn from(value: rusqlite_migration::Error) -> Self {
+        // Todo: If necessary transform [rusqlite_migration::Error] errors into database agnostic errors.
         BookError::DBError(value.into())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::error::Error;
 
     use rusqlite::Connection;
     use rusqlite_migration::{Migrations, M};
 
     use crate::books::models::BookError;
+
+    use super::open_connection;
 
     #[test]
     fn rusqlite_err() {
@@ -63,7 +101,7 @@ mod tests {
         };
 
         match myfn() {
-            Ok(_) => println!("Connection ok") ,            
+            Ok(_) => println!("Connection ok"),
             Err(e) => match e {
                 BookError::Generic(s) => println!("Generic error happen {}", s),
                 BookError::NotFound(id) => println!("Id not found {}", id),
@@ -73,21 +111,30 @@ mod tests {
                 },
             },
         }
-
     }
 
     #[test]
-    fn db_test_fn() {
-        let initSQL = include_str!("scripts/init.sql");
-        println!("INIT SCRIPT {}", initSQL);
-        let migrations = Migrations::new(vec![M::up(initSQL)]);
+    fn db_test_fn() -> Result<(), BookError> {
 
-        let mut con = Connection::open("./bla.db").unwrap();
-        match migrations.to_latest(&mut con) {
-            Ok(_) => println!("Migrations done"),
-            Err(e) => println!("An error occurred {}", e),
-        }
+        let conn = open_connection("blabla.db")?;
+        println!(">>>>>>> {:?}", conn);
 
-        con.close();
+
+
+        Ok(())
+
+        
+
+        // let initSQL = include_str!("scripts/init.sql");
+        // println!("INIT SCRIPT {}", initSQL);
+        // let migrations = Migrations::new(vec![M::up(initSQL)]);
+
+        // let mut con = Connection::open("./bla.db").unwrap();
+        // match migrations.to_latest(&mut con) {
+        //     Ok(_) => println!("Migrations done"),
+        //     Err(e) => println!("An error occurred {}", e),
+        // }
+
+        // con.close();
     }
 }

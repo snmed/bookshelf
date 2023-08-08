@@ -9,6 +9,8 @@
 
 // Remove as soon implementation is done
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use std::fmt;
 use std::marker::PhantomData;
 
 use std::{error::Error, fmt::Display};
@@ -22,7 +24,7 @@ pub enum BookError {
     /// Error is returned if no item with given id were found.
     NotFound(i64),
     /// A error returned from the underlying database runtime.
-    DBError(Box<dyn std::error::Error>)
+    DBError(Box<dyn std::error::Error>),
 }
 
 impl Error for BookError {}
@@ -38,7 +40,7 @@ impl Display for BookError {
 }
 
 /// SortOrder defines the direction of a query.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Deserialize, Serialize)]
 pub enum SortOrder {
     Asc,
     Desc,
@@ -60,14 +62,15 @@ impl From<&str> for SortOrder {
 }
 
 /// SortDescriptor describes a column and which sort order to use.
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct SortDescriptor(String, SortOrder);
 
 /// StoreResult a generic store result.
+#[derive(Debug, Deserialize, Serialize)]
 pub struct StoreResult<T> {
-    total: u64,
-    skipped: u64,
-    items: Vec<T>,
+    pub total: u64,
+    pub skipped: u64,
+    pub items: Vec<T>,
 }
 
 pub struct ConfigNew;
@@ -79,8 +82,9 @@ Configuration for searching in the BookDB.
 This struct and it's logic might be a little bit complex (Builder Pattern + ZST Trait Implementation) for
 its purpose, but this project is also a playground for learning rust.
 */
-#[derive(Debug)]
+#[derive(Deserialize)]
 pub struct SearchConfig<State = ConfigNew> {
+    #[serde(skip)]
     state: PhantomData<State>,
     skip: Option<u64>,
     sort: Option<Vec<SortDescriptor>>,
@@ -88,6 +92,21 @@ pub struct SearchConfig<State = ConfigNew> {
     text: String,
 }
 
+impl<State> fmt::Debug for SearchConfig<State> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SearchConfig")
+            .field("state", &self.state)
+            .field("skip", &self.skip)
+            .field("sort", &self.sort)
+            .field("take", &self.take)
+            .field("text", &self.text)
+            .finish()
+    }
+}
+
+// Implementation for the ConfigNew state.
+// As stated before, this is only for educational purpose and could
+// be made easier.
 impl SearchConfig<ConfigNew> {
     pub fn new(txt: &str) -> SearchConfig<ConfigNew> {
         Self {
@@ -133,6 +152,8 @@ impl SearchConfig<ConfigNew> {
 }
 
 /// BookDB provides functions to store and retrieve books from the underlying data store.
+/// For me as beginner, I use [core::Result] to get familiar with rust std. But in future,
+/// I might use a type alias like `type Result<T, E = BookError> = core::Result<T, E>;`.
 pub trait BookDB {
     fn add_book(&self, book: Book) -> Result<Book, BookError>;
     fn update_book(&self, book: &mut Book) -> Result<(), BookError>;
@@ -162,7 +183,6 @@ pub struct Book {
     pub created: DateTime<Utc>,
     pub updated: DateTime<Utc>,
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -203,5 +223,24 @@ mod tests {
             cfg.skip.unwrap(),
             std::mem::size_of_val(&cfg.state)
         );
+
+        let data = r#"
+        {
+            "text": "John*",
+            "skip": 42
+        }        
+        "#;
+
+        let cfg2: serde_json::Result<SearchConfig> = serde_json::from_str(data);
+
+        match cfg2 {
+            Ok(c) => println!(
+                "CONFIG: {} skip: {} take: {}",
+                c.text,
+                c.skip.unwrap_or(99),
+                c.take.unwrap_or(999)
+            ),
+            Err(e) => println!("ERROR: {:?}", e),
+        }
     }
 }
