@@ -9,7 +9,7 @@
 
 // Remove as soon implementation is done
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 use std::fmt;
 use std::marker::PhantomData;
 
@@ -23,8 +23,8 @@ pub enum BookError {
     Generic(String),
     /// Error is returned if no item with given id were found.
     NotFound(i64),
-    /// A error returned from the underlying database runtime.
-    DBError(Box<dyn std::error::Error>),
+    /// An error returned from the underlying database runtime.
+    DBError(Box<dyn std::error::Error>),    
 }
 
 impl Error for BookError {}
@@ -34,7 +34,7 @@ impl Display for BookError {
         match self {
             BookError::Generic(s) => s.fmt(f),
             BookError::NotFound(id) => write!(f, "did not find book with id: {id}"),
-            BookError::DBError(e) => write!(f, "database error: {}", *e),
+            BookError::DBError(e) => write!(f, "database error: {}", *e)
         }
     }
 }
@@ -155,21 +155,21 @@ impl SearchConfig<ConfigNew> {
 /// For me as beginner, I use [core::Result] to get familiar with rust std. But in future,
 /// I might use a type alias like `type Result<T, E = BookError> = core::Result<T, E>;`.
 pub trait BookDB {
-    fn add_book(&self, book: Book) -> Result<Book, BookError>;
-    fn update_book(&self, book: &mut Book) -> Result<(), BookError>;
-    fn delete_book(&self, book: &Book) -> Result<(), BookError>;
-    fn delete_book_by_id(&self, id: i64) -> Result<(), BookError>;
-    fn fetch_books(&self, search: &SearchConfig) -> Result<StoreResult<Book>, BookError>;
+    fn add_book(&mut self, book: Book) -> Result<Book, BookError>;
+    fn update_book(&mut self, book: &mut Book) -> Result<(), BookError>;
+    fn delete_book(&mut self, book: &Book) -> Result<(), BookError>;
+    fn delete_book_by_id(&mut self, id: i64) -> Result<(), BookError>;
+    fn fetch_books(&mut self, search: &SearchConfig) -> Result<StoreResult<Book>, BookError>;
 
-    fn get_tags(&self, pattern: &str) -> Result<StoreResult<String>, BookError>;
-    fn get_authors(&self, search: &SearchConfig) -> Result<StoreResult<String>, BookError>;
+    fn get_tags(&mut self, pattern: &str) -> Result<StoreResult<String>, BookError>;
+    fn get_authors(&mut self, search: &SearchConfig) -> Result<StoreResult<String>, BookError>;
 }
 
 /// A book representation for the bookshelf application.
-#[derive(Debug, Default, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Book {
     pub authors: Vec<String>,
-    pub cover_img: Option<Vec<u8>>,
+    pub cover_img: Option<String>,
     pub description: Option<String>,
     pub isbn: String,
     pub lang: String,
@@ -177,12 +177,14 @@ pub struct Book {
     pub title: String,
     pub sub_title: Option<String>,
     pub publisher: Option<String>,
+    pub publish_date: Option<DateTime<Utc>>,
 
     // Required for Database
     pub id: i64,
     pub created: DateTime<Utc>,
     pub updated: DateTime<Utc>,
 }
+
 
 #[cfg(test)]
 mod tests {
