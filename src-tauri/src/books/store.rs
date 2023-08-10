@@ -7,7 +7,7 @@
 #![allow(dead_code)]
 
 use chrono::{DateTime, TimeZone, Utc};
-use rusqlite::{named_params, params, Connection, Row};
+use rusqlite::{named_params, params, Connection, MappedRows, Row, Transaction};
 use rusqlite_migration::{Migrations, M};
 
 use super::models::{Book, BookDB, BookError, SearchConfig, StoreResult};
@@ -126,7 +126,7 @@ impl BookDB for SqliteStore {
         todo!()
     }
 
-    fn delete_book_by_id(&mut self, id: i64) -> Result<(), BookError> {
+    fn delete_book_by_id(&mut self, id: &i64) -> Result<(), BookError> {
         todo!()
     }
 
@@ -141,7 +141,47 @@ impl BookDB for SqliteStore {
     fn get_authors(&mut self, search: &SearchConfig) -> Result<StoreResult<String>, BookError> {
         todo!()
     }
+
+    fn get_book(&mut self, id: &i64) -> Result<Book, BookError> {
+        let mut book = Book::default();
+        
+
+        Ok(Book::default())
+    }
 }
+
+
+fn load_authors_of_book(conn: &Connection, id: &i64) -> Result<Vec<String>, BookError> {
+    let query = "SELECT name FROM authors WHERE book_id = ?1 ORDER BY name ASC";
+
+    let mut stmt = conn.prepare(query)?;
+    let rows = stmt.query_map(&[id], |row| Ok(row.get::<usize, String>(0)?))?;
+    
+    let mut authors: Vec<String> = Vec::new();
+    for tag in rows {
+        authors.push(tag?);
+    }
+
+    Ok(authors)
+}
+
+fn load_tags_of_book(
+    conn: &Connection,
+    id: &i64,
+) -> Result<Vec<String>, BookError> {
+    let query = "SELECT tag FROM tags WHERE book_id = ?1 ORDER BY tag ASC";
+
+    let mut stmt = conn.prepare(query)?;
+    let rows = stmt.query_map(&[id], |row| Ok(row.get::<usize, String>(0)?))?;
+    
+    let mut tags: Vec<String> = Vec::new();
+    for tag in rows {
+        tags.push(tag?);
+    }
+
+    Ok(tags)
+}
+
 
 impl From<rusqlite::Error> for BookError {
     fn from(value: rusqlite::Error) -> Self {
@@ -168,15 +208,45 @@ fn convert_timestamp(timestamp: i64) -> Result<DateTime<Utc>, BookError> {
 
 #[cfg(test)]
 mod tests {
-
-    use std::ops::Add;
-
-    use chrono::{DateTime, Utc};
-    use rusqlite::{params, Connection, Row};
-
-    use crate::books::models::{Book, BookDB, BookError};
+    use std::error::Error;
 
     use super::SqliteStore;
+    use crate::books::models::{Book, BookDB, BookError};
+    use crate::books::store::{load_authors_of_book, load_tags_of_book};
+    use chrono::prelude::*;
+    use chrono::Utc;
+    use rusqlite::Connection;
+
+    type Result<T = (), E = Box<dyn Error>> = std::result::Result<T, E>;
+
+    #[test]
+    fn add_book_successfully() -> Result {
+        let mut db = SqliteStore::new("db_file")?;
+        let new_book = Book {
+            authors: vec![String::from("Schiller"), "Goethe".to_owned()],
+            cover_img: None,
+            description: Some("Most loved and famous book ever!".to_owned()),
+            isbn: String::from("123456789"),
+            lang: String::from("DE"),
+            tags: Some(vec!["Classic".to_owned(), "Poem".to_owned()]),
+            title: String::from("The Famous One"),
+            sub_title: None,
+            publisher: Some("Plato Verlag".to_owned()),
+            publish_date: Some(Utc.with_ymd_and_hms(1743, 1, 12, 13, 14, 44).unwrap()),
+            id: 123465798, // Should never be set or inserted
+            created: Utc::now()
+                .checked_sub_signed(chrono::Duration::seconds(1000000))
+                .unwrap(),
+            updated: Utc::now()
+                .checked_sub_signed(chrono::Duration::seconds(1000000))
+                .unwrap(),
+        };
+
+        let saved_book = db.add_book(new_book.clone())?;
+        assert_eq!(new_book, saved_book);
+
+        Ok(())
+    }
 
     #[test]
     fn rusqlite_err() {
@@ -200,48 +270,65 @@ mod tests {
 
     #[test]
     fn db_test_fn() -> Result<(), BookError> {
-        let mut db = SqliteStore::new("db_file")?;
+        let db = SqliteStore::new("db_file")?;
 
         println!("Got DB {:?}", db);
 
-        let mybook = db.add_book(Book {
-            authors: vec![String::from("James Bond"), "Ms Money Penny".to_owned()],
-            cover_img: None,
-            description: Some("Supe Duper Book".to_owned()),
-            isbn: String::from("132456789"),
-            lang: String::from("DE"),
-            tags: Some(vec!["Thriller".to_owned(), "Spies".to_owned()]),
-            title: String::from("Never say never"),
-            sub_title: None,
-            publisher: Some("Broccoli Verlag".to_owned()),
-            publish_date: Some(Utc::now()),
-            id: 0,
-            created: Utc::now()
-                .checked_sub_signed(chrono::Duration::seconds(6400000))
-                .unwrap(),
-            updated: Utc::now()
-                .checked_sub_signed(chrono::Duration::seconds(6900000))
-                .unwrap(),
-        })?;
+        // let tx = db.conn.transaction()?;
+        // let vec = load_authors_of_book(&tx, &1)?;
 
-        println!("Saved item {:?}", mybook);
+        let vec = load_authors_of_book(&db.conn, &1)?;
 
-        let saved: (String, i64, i64) = db.conn.query_row(
-            "SELECT title, created, updated FROM books WHERE id = ?1",
-            params![&mybook.id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-        )?;
+        println!(">>>>>>>>>>>> {:?}", vec);
 
-        println!("Queryed {:?}", saved);
+        let tags = load_tags_of_book(&db.conn, &1)?;
 
-        let js_str = serde_json::to_string(&mybook).unwrap();
-        println!(">>>>>>>>>> JSON: {}", js_str);
-
-        let new_book: Book = serde_json::from_str(&js_str).unwrap();
-
-        println!("Deserialized: {:?}", new_book);
+        println!(">>>>>>>>>>>> {:?}", tags);
 
         Ok(())
+
+        // let mybook = db.add_book(Book {
+        //     authors: vec![String::from("James Bond"), "Ms Money Penny".to_owned()],
+        //     cover_img: None,
+        //     description: Some("Supe Duper Book".to_owned()),
+        //     isbn: String::from("132456789"),
+        //     lang: String::from("DE"),
+        //     tags: Some(vec!["Thriller".to_owned(), "Spies".to_owned()]),
+        //     title: String::from("Never say never"),
+        //     sub_title: None,
+        //     publisher: Some("Broccoli Verlag".to_owned()),
+        //     publish_date: Some(Utc::now()),
+        //     id: 0,
+        //     created: Utc::now()
+        //         .checked_sub_signed(chrono::Duration::seconds(6400000))
+        //         .unwrap(),
+        //     updated: Utc::now()
+        //         .checked_sub_signed(chrono::Duration::seconds(6900000))
+        //         .unwrap(),
+        // })?;
+
+        // println!("Saved item {:?}", mybook);
+
+        // let saved: (String, i64, i64) = db.conn.query_row(
+        //     "SELECT title, created, updated FROM books WHERE id = ?1",
+        //     params![&mybook.id],
+        //     |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        // )?;
+
+        // println!("Queryed {:?}", saved);
+
+        // let js_str = serde_json::to_string(&mybook).unwrap();
+        // println!(">>>>>>>>>> JSON: {}", js_str);
+
+        // let new_book: Book = serde_json::from_str(&js_str).unwrap();
+
+        // println!(
+        //     "Deserialized: {:?} IS ASSERTION {:?}",
+        //     new_book,
+        //     cfg!(debug_assertions)
+        // );
+
+        // Ok(())
 
         // let conn = open_sqlite_connection("blabla.db")?;
         // println!(">>>>>>> {:?}", conn);

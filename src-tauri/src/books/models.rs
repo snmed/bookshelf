@@ -156,9 +156,10 @@ impl SearchConfig<ConfigNew> {
 /// I might use a type alias like `type Result<T, E = BookError> = core::Result<T, E>;`.
 pub trait BookDB {
     fn add_book(&mut self, book: Book) -> Result<Book, BookError>;
+    fn get_book(&mut self, id: &i64) -> Result<Book, BookError>;
     fn update_book(&mut self, book: &mut Book) -> Result<(), BookError>;
     fn delete_book(&mut self, book: &Book) -> Result<(), BookError>;
-    fn delete_book_by_id(&mut self, id: i64) -> Result<(), BookError>;
+    fn delete_book_by_id(&mut self, id: &i64) -> Result<(), BookError>;
     fn fetch_books(&mut self, search: &SearchConfig) -> Result<StoreResult<Book>, BookError>;
 
     fn get_tags(&mut self, pattern: &str) -> Result<StoreResult<String>, BookError>;
