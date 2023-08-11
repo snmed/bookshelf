@@ -34,12 +34,12 @@ fn open_sqlite_connection(db_file: &str) -> Result<Connection, BookError> {
     Ok(conn)
 }
 
-#[cfg(debug_assertions)]
-fn create_sqlite_connection(_: &str) -> Result<Connection, BookError> {
-    Ok(Connection::open_in_memory()?)
-}
+// #[cfg(debug_assertions)]
+// fn create_sqlite_connection(_: &str) -> Result<Connection, BookError> {
+//     Ok(Connection::open_in_memory()?)
+// }
 
-#[cfg(not(debug_assertions))]
+// #[cfg(not(debug_assertions))]
 fn create_sqlite_connection(db_file: &str) -> Result<Connection, BookError> {
     Ok(Connection::open(db_file)?)
 }
@@ -60,7 +60,7 @@ impl SqliteStore {
 impl BookDB for SqliteStore {
     /// Add a new book to the store.
     /// TODO: Write a unit test to ensure functionality.
-    fn add_book(&mut self, mut book: Book) -> Result<Book, BookError> {
+    fn add_book(&mut self, book: &mut Book) -> Result<(), BookError> {
         let tx = self.conn.transaction()?;
 
         let mut books_stmt = tx.prepare(r#"INSERT INTO books (cover_img, description, isbn, lang, title, sub_title, publisher, publish_date, created, updated)
@@ -113,9 +113,14 @@ impl BookDB for SqliteStore {
         book.created = convert_timestamp(dates.0)?;
         book.updated = convert_timestamp(dates.1)?;
 
+        book.authors.sort();
+        if let Some(tags) = book.tags.as_mut() {
+            tags.sort();
+        }      
+
         tx.commit()?;
 
-        Ok(book)
+        Ok(())
     }
 
     fn update_book(&mut self, book: &mut Book) -> Result<(), BookError> {
@@ -143,20 +148,40 @@ impl BookDB for SqliteStore {
     }
 
     fn get_book(&mut self, id: &i64) -> Result<Book, BookError> {
-        let mut book = Book::default();
-        
+        let query = r#"SELECT id, cover_img, description, isbn, lang, title, sub_title,
+         publisher, publish_date, created, updated FROM books WHERE id = ?1"#;
 
-        Ok(Book::default())
+        let book = self.conn.query_row(query, [id], |row| {
+            Ok(Book {
+                authors: load_authors_of_book(&self.conn, id)?,
+                cover_img: row.get("cover_img")?,
+                description: row.get("description")?,
+                isbn: row.get("isbn")?,
+                lang: row.get("lang")?,
+                tags: load_tags_of_book(&self.conn, id).map(|v| match v.len() {
+                    0 => None,
+                    _ => Some(v)
+                })?,
+                title: row.get("title")?,
+                sub_title: row.get("sub_title")?,
+                publisher: row.get("publisher")?,
+                publish_date: row.get("publish_date")?,
+                id: row.get("id")?,
+                created: convert_timestamp(row.get::<&str, i64>("created")?).expect("Conversion database integer to DateTime failed"),
+                updated: convert_timestamp(row.get::<&str, i64>("updated")?).expect("Conversion database integer to DateTime failed"),
+            })
+        })?;
+
+        Ok(book)
     }
 }
 
-
-fn load_authors_of_book(conn: &Connection, id: &i64) -> Result<Vec<String>, BookError> {
+fn load_authors_of_book(conn: &Connection, id: &i64) -> Result<Vec<String>, rusqlite::Error> {
     let query = "SELECT name FROM authors WHERE book_id = ?1 ORDER BY name ASC";
 
     let mut stmt = conn.prepare(query)?;
-    let rows = stmt.query_map(&[id], |row| Ok(row.get::<usize, String>(0)?))?;
-    
+    let rows = stmt.query_map([id], |row| row.get::<usize, String>(0))?;
+
     let mut authors: Vec<String> = Vec::new();
     for tag in rows {
         authors.push(tag?);
@@ -165,15 +190,12 @@ fn load_authors_of_book(conn: &Connection, id: &i64) -> Result<Vec<String>, Book
     Ok(authors)
 }
 
-fn load_tags_of_book(
-    conn: &Connection,
-    id: &i64,
-) -> Result<Vec<String>, BookError> {
+fn load_tags_of_book(conn: &Connection, id: &i64) -> Result<Vec<String>, rusqlite::Error> {
     let query = "SELECT tag FROM tags WHERE book_id = ?1 ORDER BY tag ASC";
 
     let mut stmt = conn.prepare(query)?;
-    let rows = stmt.query_map(&[id], |row| Ok(row.get::<usize, String>(0)?))?;
-    
+    let rows = stmt.query_map([id], |row| row.get::<usize, String>(0))?;
+
     let mut tags: Vec<String> = Vec::new();
     for tag in rows {
         tags.push(tag?);
@@ -181,7 +203,6 @@ fn load_tags_of_book(
 
     Ok(tags)
 }
-
 
 impl From<rusqlite::Error> for BookError {
     fn from(value: rusqlite::Error) -> Self {
@@ -201,7 +222,7 @@ fn convert_timestamp(timestamp: i64) -> Result<DateTime<Utc>, BookError> {
     match Utc.timestamp_opt(timestamp, 0) {
         chrono::LocalResult::Single(dt) => Ok(dt),
         _ => Err(BookError::Generic(
-            "invalid timestamp conversion".to_owned(),
+            "Invalid timestamp conversion".to_owned(),
         )),
     }
 }
@@ -209,20 +230,22 @@ fn convert_timestamp(timestamp: i64) -> Result<DateTime<Utc>, BookError> {
 #[cfg(test)]
 mod tests {
     use std::error::Error;
+    use std::thread;
+    use std::time::Duration;
 
     use super::SqliteStore;
     use crate::books::models::{Book, BookDB, BookError};
     use crate::books::store::{load_authors_of_book, load_tags_of_book};
     use chrono::prelude::*;
     use chrono::Utc;
-    use rusqlite::Connection;
+    
 
     type Result<T = (), E = Box<dyn Error>> = std::result::Result<T, E>;
 
     #[test]
     fn add_book_successfully() -> Result {
         let mut db = SqliteStore::new("db_file")?;
-        let new_book = Book {
+        let mut new_book = Book {
             authors: vec![String::from("Schiller"), "Goethe".to_owned()],
             cover_img: None,
             description: Some("Most loved and famous book ever!".to_owned()),
@@ -242,132 +265,65 @@ mod tests {
                 .unwrap(),
         };
 
-        let saved_book = db.add_book(new_book.clone())?;
-        assert_eq!(new_book, saved_book);
+        db.add_book(&mut new_book)?;
+        let saved_book = db.get_book(&new_book.id)?;
+
+        assert_eq!(new_book.title, saved_book.title);
+        assert_eq!(new_book.sub_title, saved_book.sub_title);
+        assert_eq!(new_book.isbn, saved_book.isbn);
+        assert_eq!(new_book.cover_img, saved_book.cover_img);
+        assert_eq!(new_book.description, saved_book.description);
+        assert_eq!(new_book.lang, saved_book.lang);
+        assert_eq!(new_book.publisher, saved_book.publisher);
+        assert_eq!(new_book.publish_date, saved_book.publish_date);
+
+        assert_eq!(new_book.created, saved_book.created);
+        assert_eq!(new_book.updated, saved_book.updated);
+
+        assert_eq!(new_book.authors, saved_book.authors);
+        assert_eq!(new_book.tags, saved_book.tags);
 
         Ok(())
-    }
-
-    #[test]
-    fn rusqlite_err() {
-        let myfn = || -> Result<Connection, BookError> {
-            let con = Connection::open("/var/asdh")?;
-            Ok(con)
-        };
-
-        match myfn() {
-            Ok(_) => println!("Connection ok"),
-            Err(e) => match e {
-                BookError::Generic(s) => println!("Generic error happen {}", s),
-                BookError::NotFound(id) => println!("Id not found {}", id),
-                BookError::DBError(e) => match e.downcast_ref::<rusqlite::Error>() {
-                    Some(e) => println!("Rusqlite Error: {}", e),
-                    None => println!("Some other error"),
-                },
-            },
-        }
     }
 
     #[test]
     fn db_test_fn() -> Result<(), BookError> {
-        let db = SqliteStore::new("db_file")?;
 
-        println!("Got DB {:?}", db);
+        let handle = thread::spawn(|| -> Result<(), BookError> {
+            let mut db = SqliteStore::new("blabla.db")?;
+            println!("Got DB {:?}", db);
+            thread::sleep(Duration::from_millis(500));
+            
+            let mut b = Book {
+                title: "Mein Krampf mit Rust".to_owned(),
+                .. Book::default()
+            };
 
-        // let tx = db.conn.transaction()?;
-        // let vec = load_authors_of_book(&tx, &1)?;
+            db.add_book(&mut b)?;
 
-        let vec = load_authors_of_book(&db.conn, &1)?;
+            println!("Book saved in thread {:?}", b);
 
-        println!(">>>>>>>>>>>> {:?}", vec);
+            Ok(())
 
-        let tags = load_tags_of_book(&db.conn, &1)?;
+        });
+        
+        
 
-        println!(">>>>>>>>>>>> {:?}", tags);
+        let mut db2 = SqliteStore::new("blabla.db")?;
+
+        println!("Got DB 2 {:?}", db2);
+
+        let mut b = Book {
+            title: "Mein Krampf mit Rust 2".to_owned(),
+            .. Book::default()
+        };
+
+        db2.add_book(&mut b)?;
+
+
+        handle.join();
 
         Ok(())
 
-        // let mybook = db.add_book(Book {
-        //     authors: vec![String::from("James Bond"), "Ms Money Penny".to_owned()],
-        //     cover_img: None,
-        //     description: Some("Supe Duper Book".to_owned()),
-        //     isbn: String::from("132456789"),
-        //     lang: String::from("DE"),
-        //     tags: Some(vec!["Thriller".to_owned(), "Spies".to_owned()]),
-        //     title: String::from("Never say never"),
-        //     sub_title: None,
-        //     publisher: Some("Broccoli Verlag".to_owned()),
-        //     publish_date: Some(Utc::now()),
-        //     id: 0,
-        //     created: Utc::now()
-        //         .checked_sub_signed(chrono::Duration::seconds(6400000))
-        //         .unwrap(),
-        //     updated: Utc::now()
-        //         .checked_sub_signed(chrono::Duration::seconds(6900000))
-        //         .unwrap(),
-        // })?;
-
-        // println!("Saved item {:?}", mybook);
-
-        // let saved: (String, i64, i64) = db.conn.query_row(
-        //     "SELECT title, created, updated FROM books WHERE id = ?1",
-        //     params![&mybook.id],
-        //     |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-        // )?;
-
-        // println!("Queryed {:?}", saved);
-
-        // let js_str = serde_json::to_string(&mybook).unwrap();
-        // println!(">>>>>>>>>> JSON: {}", js_str);
-
-        // let new_book: Book = serde_json::from_str(&js_str).unwrap();
-
-        // println!(
-        //     "Deserialized: {:?} IS ASSERTION {:?}",
-        //     new_book,
-        //     cfg!(debug_assertions)
-        // );
-
-        // Ok(())
-
-        // let conn = open_sqlite_connection("blabla.db")?;
-        // println!(">>>>>>> {:?}", conn);
-
-        // let mut stmt = conn.prepare("SELECT id, title, lang FROM books")?;
-
-        // let nlub = stmt.query([])?.mapped(|row| {
-        //     let id = row.get::<usize, u64>(0)?;
-        //     println!("ID: {}", id);
-        //     let mut stmt_tags = conn.prepare("SELECT value FROM tags WHERE book_id = ?")?;
-        //     if let Ok(r) = stmt_tags.query_map([id], |row| Ok(row.get::<usize, String>(0).unwrap()))
-        //     {
-        //         let tags: Vec<String> = r.filter_map(|t| t.ok()).collect();
-        //         println!("TAGS: {:?}", tags);
-        //     }
-
-        //     Ok("bla".to_owned())
-        // });
-
-        // stmt.column_names().iter().for_each(|s| {
-        //     println!("{}", *s);
-        // });
-
-        // for i in nlub {
-        //     println!(">>>> {}", i?);
-        // }
-
-        // Ok(())
-
-        // let initSQL = include_str!("scripts/init.sql");
-        // println!("INIT SCRIPT {}", initSQL);
-        // let migrations = Migrations::new(vec![M::up(initSQL)]);
-
-        // let mut con = Connection::open("./bla.db").unwrap();
-        // match migrations.to_latest(&mut con) {
-        //     Ok(_) => println!("Migrations done"),
-        //     Err(e) => println!("An error occurred {}", e),
-        // }
-
-        // con.close();
     }
 }

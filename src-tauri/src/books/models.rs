@@ -7,16 +7,16 @@
 // TODO: Remove after initial implementation is done.
 #![allow(dead_code)]
 
-// Remove as soon implementation is done
+
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::marker::PhantomData;
 
 use std::{error::Error, fmt::Display};
 
 /// All known error for the books module.
-
+#[non_exhaustive]
 #[derive(Debug)]
 pub enum BookError {
     /// A generic error of the books modul.
@@ -28,6 +28,8 @@ pub enum BookError {
 }
 
 impl Error for BookError {}
+unsafe impl Send for BookError {}
+unsafe impl Sync for BookError {}
 
 impl Display for BookError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -155,7 +157,7 @@ impl SearchConfig<ConfigNew> {
 /// For me as beginner, I use [core::Result] to get familiar with rust std. But in future,
 /// I might use a type alias like `type Result<T, E = BookError> = core::Result<T, E>;`.
 pub trait BookDB {
-    fn add_book(&mut self, book: Book) -> Result<Book, BookError>;
+    fn add_book(&mut self, book: &mut Book) -> Result<(), BookError>;
     fn get_book(&mut self, id: &i64) -> Result<Book, BookError>;
     fn update_book(&mut self, book: &mut Book) -> Result<(), BookError>;
     fn delete_book(&mut self, book: &Book) -> Result<(), BookError>;
@@ -185,7 +187,6 @@ pub struct Book {
     pub created: DateTime<Utc>,
     pub updated: DateTime<Utc>,
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -235,6 +236,7 @@ mod tests {
         "#;
 
         let cfg2: serde_json::Result<SearchConfig> = serde_json::from_str(data);
+        
 
         match cfg2 {
             Ok(c) => println!(
