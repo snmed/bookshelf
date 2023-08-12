@@ -10,33 +10,42 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::borrow::Borrow;
 use std::fmt;
 use std::marker::PhantomData;
 
 use std::{error::Error, fmt::Display};
 
 /// All known error for the books module.
+/// Probably use crate `thiserror` as soon as familiar 
+/// enough with error handling and implementation.
 #[non_exhaustive]
 #[derive(Debug)]
 pub enum BookError {
     /// A generic error of the books modul.
     Generic(String),
     /// Error is returned if no item with given id were found.
-    NotFound(i64),
+    NotFound,
     /// An error returned from the underlying database runtime.
     DBError(Box<dyn std::error::Error>),    
+    /// An error if authors is empty.
+    EmptyAuthors
 }
 
 impl Error for BookError {}
 unsafe impl Send for BookError {}
 unsafe impl Sync for BookError {}
 
+
+pub type Result<T, E = BookError> = core::result::Result<T,E>;
+
 impl Display for BookError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             BookError::Generic(s) => s.fmt(f),
-            BookError::NotFound(id) => write!(f, "did not find book with id: {id}"),
-            BookError::DBError(e) => write!(f, "database error: {}", *e)
+            BookError::NotFound => write!(f, "Did not find item with given id"),
+            BookError::DBError(e) => write!(f, "Database error: {}", *e),
+            BookError::EmptyAuthors => write!(f, "Book requires at least one author"),
         }
     }
 }
@@ -75,6 +84,8 @@ pub struct StoreResult<T> {
     pub items: Vec<T>,
 }
 
+pub trait SearchParam: AsRef<SearchConfig>{}
+
 pub struct ConfigNew;
 pub struct ConfigInitialized;
 
@@ -105,6 +116,14 @@ impl<State> fmt::Debug for SearchConfig<State> {
             .finish()
     }
 }
+
+
+impl<State> AsRef<SearchConfig<State>> for SearchConfig<State> {
+    fn as_ref(&self) -> &SearchConfig<State> {
+        self
+    }
+}
+
 
 // Implementation for the ConfigNew state.
 // As stated before, this is only for educational purpose and could
@@ -153,19 +172,22 @@ impl SearchConfig<ConfigNew> {
     }
 }
 
+
+
+
 /// BookDB provides functions to store and retrieve books from the underlying data store.
 /// For me as beginner, I use [core::Result] to get familiar with rust std. But in future,
 /// I might use a type alias like `type Result<T, E = BookError> = core::Result<T, E>;`.
 pub trait BookDB {
-    fn add_book(&mut self, book: &mut Book) -> Result<(), BookError>;
-    fn get_book(&mut self, id: &i64) -> Result<Book, BookError>;
-    fn update_book(&mut self, book: &mut Book) -> Result<(), BookError>;
-    fn delete_book(&mut self, book: &Book) -> Result<(), BookError>;
-    fn delete_book_by_id(&mut self, id: &i64) -> Result<(), BookError>;
-    fn fetch_books(&mut self, search: &SearchConfig) -> Result<StoreResult<Book>, BookError>;
+    fn add_book(&mut self, book: &mut Book) -> Result<()>;
+    fn get_book<T: Borrow<i64>>(&mut self, id: T) -> Result<Book>;
+    fn update_book(&mut self, book: &mut Book) -> Result<()>;
+    fn delete_book(&mut self, book: &Book) -> Result<()>;
+    fn delete_book_by_id<T: Borrow<i64>>(&mut self, id: T) -> Result<()>;
+    fn fetch_books<T: AsRef<SearchConfig<ConfigInitialized>>>(&mut self, search: T) -> Result<StoreResult<Book>>;
 
-    fn get_tags(&mut self, pattern: &str) -> Result<StoreResult<String>, BookError>;
-    fn get_authors(&mut self, search: &SearchConfig) -> Result<StoreResult<String>, BookError>;
+    fn get_tags(&mut self, pattern: &str) -> Result<StoreResult<String>>;
+    fn get_authors<T: AsRef<SearchConfig<ConfigInitialized>>>(&mut self, search: T) -> Result<StoreResult<String>>;
 }
 
 /// A book representation for the bookshelf application.
@@ -203,49 +225,5 @@ mod tests {
 
         assert_eq!(SortOrder::from("desc"), SortOrder::Desc);
         assert_eq!(SortOrder::from("dEsC"), SortOrder::Desc);
-    }
-
-    #[test]
-    fn my_test() {
-        let cfg = SearchConfig::new("")
-            .use_skip(12)
-            .use_sort(vec![SortDescriptor("bal".to_owned(), SortOrder::Asc)])
-            .use_take(21)
-            .build();
-        //let cfg = SearchConfig::new("asdasdasd").use_skip(12);
-
-        println!(
-            "Build search config {} {} {}",
-            cfg.text,
-            cfg.skip.unwrap(),
-            cfg.take.unwrap()
-        );
-        //println!("Build search config {} {}", cfg.text, cfg.skip.unwrap())
-
-        println!(
-            "AGAIN {} Size: {}",
-            cfg.skip.unwrap(),
-            std::mem::size_of_val(&cfg.state)
-        );
-
-        let data = r#"
-        {
-            "text": "John*",
-            "skip": 42
-        }        
-        "#;
-
-        let cfg2: serde_json::Result<SearchConfig> = serde_json::from_str(data);
-        
-
-        match cfg2 {
-            Ok(c) => println!(
-                "CONFIG: {} skip: {} take: {}",
-                c.text,
-                c.skip.unwrap_or(99),
-                c.take.unwrap_or(999)
-            ),
-            Err(e) => println!("ERROR: {:?}", e),
-        }
     }
 }

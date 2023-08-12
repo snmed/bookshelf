@@ -6,14 +6,16 @@
 // TODO: Remove after initial implementation is done.
 #![allow(dead_code)]
 
+use std::borrow::Borrow;
+
 use chrono::{DateTime, TimeZone, Utc};
-use rusqlite::{named_params, params, Connection, MappedRows, Row, Transaction};
+use rusqlite::{named_params, params, Connection};
 use rusqlite_migration::{Migrations, M};
 
-use super::models::{Book, BookDB, BookError, SearchConfig, StoreResult};
+use super::models::{Book, BookDB, BookError, Result, SearchConfig, StoreResult, ConfigInitialized, SearchParam};
 
 /// Opens or creates a new books database and returns it.
-fn open_sqlite_connection(db_file: &str) -> Result<Connection, BookError> {
+fn open_sqlite_connection(db_file: &str) -> Result<Connection> {
     // Add all required sql scripts to the migrator
     let mut scripts = vec![M::up(include_str!("scripts/init.sql"))];
 
@@ -34,13 +36,13 @@ fn open_sqlite_connection(db_file: &str) -> Result<Connection, BookError> {
     Ok(conn)
 }
 
-// #[cfg(debug_assertions)]
-// fn create_sqlite_connection(_: &str) -> Result<Connection, BookError> {
-//     Ok(Connection::open_in_memory()?)
-// }
+#[cfg(debug_assertions)]
+fn create_sqlite_connection(_: &str) -> Result<Connection> {
+    Ok(Connection::open_in_memory()?)
+}
 
-// #[cfg(not(debug_assertions))]
-fn create_sqlite_connection(db_file: &str) -> Result<Connection, BookError> {
+#[cfg(not(debug_assertions))]
+fn create_sqlite_connection(db_file: &str) -> Result<Connection> {
     Ok(Connection::open(db_file)?)
 }
 
@@ -50,7 +52,7 @@ pub struct SqliteStore {
 }
 
 impl SqliteStore {
-    fn new(db_file: &str) -> Result<Self, BookError> {
+    fn new(db_file: &str) -> Result<Self> {
         Ok(Self {
             conn: open_sqlite_connection(db_file)?,
         })
@@ -60,7 +62,7 @@ impl SqliteStore {
 impl BookDB for SqliteStore {
     /// Add a new book to the store.
     /// TODO: Write a unit test to ensure functionality.
-    fn add_book(&mut self, book: &mut Book) -> Result<(), BookError> {
+    fn add_book(&mut self, book: &mut Book) -> Result<()> {
         let tx = self.conn.transaction()?;
 
         let mut books_stmt = tx.prepare(r#"INSERT INTO books (cover_img, description, isbn, lang, title, sub_title, publisher, publish_date, created, updated)
@@ -74,7 +76,7 @@ impl BookDB for SqliteStore {
             ":title": book.title,
             ":subt": book.sub_title,
             ":pub": book.publisher,
-            ":pubd": book.publish_date
+            ":pubd": book.publish_date.as_ref().map(|d| d.timestamp())
         })?;
         drop(books_stmt);
 
@@ -116,64 +118,144 @@ impl BookDB for SqliteStore {
         book.authors.sort();
         if let Some(tags) = book.tags.as_mut() {
             tags.sort();
-        }      
+        }
 
         tx.commit()?;
 
         Ok(())
     }
 
-    fn update_book(&mut self, book: &mut Book) -> Result<(), BookError> {
+    fn update_book(&mut self, book: &mut Book) -> Result<()> {
+        let query = r#"UPDATE books SET cover_img = :img, description = :desc, isbn = :isbn, lang = :lang, 
+            title = :title, sub_title = :sub, publisher = :pub, 'publish_date' = :pdate, updated = unixepoch() WHERE id = :id"#;
+
+        let tx = self.conn.transaction()?;
+
+        tx.execute(
+            query,
+            named_params! {
+                ":img": book.cover_img,
+                ":desc": book.description,
+                ":isbn": book.isbn,
+                ":lang": book.lang,
+                ":title": book.title,
+                ":sub": book.sub_title,
+                ":pub": book.publisher,
+                ":pdate": book.publish_date.as_ref().map(|d| d.timestamp()),
+                ":id": book.id
+            },
+        )?;
+
+        update_book_tags(&tx, book)?;
+        update_book_authors(&tx, book)?;
+
+        tx.commit()?;
+
+        Ok(())
+    }
+
+    fn delete_book(&mut self, book: &Book) -> Result<()> {
+        self.delete_book_by_id(book.id)
+    }
+
+    fn delete_book_by_id<T>(&mut self, id: T) -> Result<()>
+    where
+        T: Borrow<i64>,
+    {
+        self.conn
+            .execute("DELETE FROM books WHERE id = ?", [id.borrow()])?;
+        Ok(())
+    }
+
+    fn fetch_books<T: AsRef<SearchConfig<ConfigInitialized>>>(&mut self, search: T) -> Result<StoreResult<Book>> {
         todo!()
     }
 
-    fn delete_book(&mut self, book: &Book) -> Result<(), BookError> {
+    fn get_tags(&mut self, pattern: &str) -> Result<StoreResult<String>> {
         todo!()
     }
 
-    fn delete_book_by_id(&mut self, id: &i64) -> Result<(), BookError> {
+    fn get_authors<T: AsRef<SearchConfig<ConfigInitialized>>>(&mut self, search: T) -> Result<StoreResult<String>> {
         todo!()
     }
 
-    fn fetch_books(&mut self, search: &SearchConfig) -> Result<StoreResult<Book>, BookError> {
-        todo!()
-    }
-
-    fn get_tags(&mut self, pattern: &str) -> Result<StoreResult<String>, BookError> {
-        todo!()
-    }
-
-    fn get_authors(&mut self, search: &SearchConfig) -> Result<StoreResult<String>, BookError> {
-        todo!()
-    }
-
-    fn get_book(&mut self, id: &i64) -> Result<Book, BookError> {
+    fn get_book<T>(&mut self, id: T) -> Result<Book>
+    where
+        T: Borrow<i64>,
+    {
         let query = r#"SELECT id, cover_img, description, isbn, lang, title, sub_title,
          publisher, publish_date, created, updated FROM books WHERE id = ?1"#;
 
-        let book = self.conn.query_row(query, [id], |row| {
+        let book = self.conn.query_row(query, [id.borrow()], |row| {
             Ok(Book {
-                authors: load_authors_of_book(&self.conn, id)?,
+                authors: load_authors_of_book(&self.conn, id.borrow())?,
                 cover_img: row.get("cover_img")?,
                 description: row.get("description")?,
                 isbn: row.get("isbn")?,
                 lang: row.get("lang")?,
-                tags: load_tags_of_book(&self.conn, id).map(|v| match v.len() {
+                tags: load_tags_of_book(&self.conn, id.borrow()).map(|v| match v.len() {
                     0 => None,
-                    _ => Some(v)
+                    _ => Some(v),
                 })?,
                 title: row.get("title")?,
                 sub_title: row.get("sub_title")?,
                 publisher: row.get("publisher")?,
-                publish_date: row.get("publish_date")?,
+                publish_date: row
+                    .get::<&str, i64>("publish_date")
+                    .map(|r| {
+                        convert_timestamp(r)
+                            .expect("Conversion database integer to DateTime failed")
+                    })
+                    .ok(),
                 id: row.get("id")?,
-                created: convert_timestamp(row.get::<&str, i64>("created")?).expect("Conversion database integer to DateTime failed"),
-                updated: convert_timestamp(row.get::<&str, i64>("updated")?).expect("Conversion database integer to DateTime failed"),
+                created: convert_timestamp(row.get::<&str, i64>("created")?)
+                    .expect("Conversion database integer to DateTime failed"),
+                updated: convert_timestamp(row.get::<&str, i64>("updated")?)
+                    .expect("Conversion database integer to DateTime failed"),
             })
         })?;
 
         Ok(book)
     }
+}
+
+fn update_book_authors(conn: &Connection, book: &mut Book) -> Result<()> {
+    if book.authors.is_empty() {
+        return Err(BookError::EmptyAuthors);
+    }
+
+    conn.execute("DELETE FROM authors WHERE book_id = ?1", [&book.id])?;
+    book.authors.sort();
+
+    let mut stmt = conn.prepare("INSERT INTO authors (book_id, name) VALUES (:id, :name)")?;
+    for a in &book.authors {
+        stmt.execute(named_params! {":id": &book.id, ":name": a})?;
+    }
+
+    Ok(())
+}
+
+fn update_book_tags(conn: &Connection, book: &mut Book) -> Result<()> {
+    conn.execute("DELETE FROM tags WHERE book_id = ?1", [&book.id])?;
+
+    match book.tags.as_mut() {
+        None => return Ok(()),
+        Some(t) if t.is_empty() => {
+            book.tags = None;
+            return Ok(());
+        }
+        Some(_) => (),
+    }
+
+    book.tags.as_mut().unwrap().sort();
+    book.tags.as_mut().unwrap().dedup();
+
+    let mut stmt = conn.prepare("INSERT INTO tags (book_id, tag) VALUES (:id, :tag)")?;
+    for t in book.tags.as_ref().unwrap() {
+        stmt.execute(named_params! { ":id": &book.id, ":tag": t })?;
+    }
+
+    Ok(())
 }
 
 fn load_authors_of_book(conn: &Connection, id: &i64) -> Result<Vec<String>, rusqlite::Error> {
@@ -207,7 +289,10 @@ fn load_tags_of_book(conn: &Connection, id: &i64) -> Result<Vec<String>, rusqlit
 impl From<rusqlite::Error> for BookError {
     fn from(value: rusqlite::Error) -> Self {
         // Todo: If necessary transform [rusqlite::Error] errors into database agnostic errors.
-        BookError::DBError(value.into())
+        match value {
+            rusqlite::Error::QueryReturnedNoRows => BookError::NotFound,
+            _ => BookError::DBError(value.into()),
+        }
     }
 }
 
@@ -230,17 +315,37 @@ fn convert_timestamp(timestamp: i64) -> Result<DateTime<Utc>, BookError> {
 #[cfg(test)]
 mod tests {
     use std::error::Error;
-    use std::thread;
-    use std::time::Duration;
-
     use super::SqliteStore;
-    use crate::books::models::{Book, BookDB, BookError};
-    use crate::books::store::{load_authors_of_book, load_tags_of_book};
+    use crate::books::models::{SearchConfig, ConfigInitialized};
+    use crate::books::models::{Book, BookDB};
     use chrono::prelude::*;
     use chrono::Utc;
-    
 
     type Result<T = (), E = Box<dyn Error>> = std::result::Result<T, E>;
+
+
+    #[test]
+    fn fetch_books() -> Result {
+        let mut db = SqliteStore::new("db_file")?;
+        let cfg = SearchConfig::new("txt");
+
+                
+        db.fetch_books(cfg.build())?;
+    
+
+        Ok(())
+
+    }
+
+    #[test]
+    fn delete_book_successfully() -> Result {
+        let mut db = SqliteStore::new("db_file")?;
+    
+        db.delete_book_by_id(1)?;        
+        assert!(db.get_book(1).is_err());
+        
+        Ok(())
+    }
 
     #[test]
     fn add_book_successfully() -> Result {
@@ -266,7 +371,7 @@ mod tests {
         };
 
         db.add_book(&mut new_book)?;
-        let saved_book = db.get_book(&new_book.id)?;
+        let saved_book = db.get_book(new_book.id)?;
 
         assert_eq!(new_book.title, saved_book.title);
         assert_eq!(new_book.sub_title, saved_book.sub_title);
@@ -284,46 +389,5 @@ mod tests {
         assert_eq!(new_book.tags, saved_book.tags);
 
         Ok(())
-    }
-
-    #[test]
-    fn db_test_fn() -> Result<(), BookError> {
-
-        let handle = thread::spawn(|| -> Result<(), BookError> {
-            let mut db = SqliteStore::new("blabla.db")?;
-            println!("Got DB {:?}", db);
-            thread::sleep(Duration::from_millis(500));
-            
-            let mut b = Book {
-                title: "Mein Krampf mit Rust".to_owned(),
-                .. Book::default()
-            };
-
-            db.add_book(&mut b)?;
-
-            println!("Book saved in thread {:?}", b);
-
-            Ok(())
-
-        });
-        
-        
-
-        let mut db2 = SqliteStore::new("blabla.db")?;
-
-        println!("Got DB 2 {:?}", db2);
-
-        let mut b = Book {
-            title: "Mein Krampf mit Rust 2".to_owned(),
-            .. Book::default()
-        };
-
-        db2.add_book(&mut b)?;
-
-
-        handle.join();
-
-        Ok(())
-
-    }
+    }    
 }
