@@ -9,10 +9,15 @@
 use std::borrow::Borrow;
 
 use chrono::{DateTime, TimeZone, Utc};
-use rusqlite::{named_params, params, Connection};
+use rusqlite::{named_params, params, params_from_iter, Connection};
 use rusqlite_migration::{Migrations, M};
 
-use super::models::{Book, BookDB, BookError, Result, SearchConfig, StoreResult, ConfigInitialized, SearchParam};
+use super::models::{
+    Book, BookDB, BookError, ConfigInitialized, Result, SearchConfig, SearchParam, StoreResult, SortOrder, SortDescriptor,
+};
+
+const SELECT_BOOKS_QUERY: &str = r#"SELECT id, cover_img, description, isbn, lang, title, sub_title,
+publisher, publish_date, created, updated FROM books"#;
 
 /// Opens or creates a new books database and returns it.
 fn open_sqlite_connection(db_file: &str) -> Result<Connection> {
@@ -167,7 +172,10 @@ impl BookDB for SqliteStore {
         Ok(())
     }
 
-    fn fetch_books<T: AsRef<SearchConfig<ConfigInitialized>>>(&mut self, search: T) -> Result<StoreResult<Book>> {
+    fn fetch_books<T: AsRef<SearchConfig<ConfigInitialized>>>(
+        &mut self,
+        search: T,
+    ) -> Result<StoreResult<Book>> {
         todo!()
     }
 
@@ -175,7 +183,12 @@ impl BookDB for SqliteStore {
         todo!()
     }
 
-    fn get_authors<T: AsRef<SearchConfig<ConfigInitialized>>>(&mut self, search: T) -> Result<StoreResult<String>> {
+    fn get_authors<T: AsRef<SearchConfig<ConfigInitialized>>>(
+        &mut self,
+        search: T,
+    ) -> Result<StoreResult<String>> {
+        let query = r"SELECT DISTINCT name FROM authors".to_owned();
+
         todo!()
     }
 
@@ -183,10 +196,12 @@ impl BookDB for SqliteStore {
     where
         T: Borrow<i64>,
     {
-        let query = r#"SELECT id, cover_img, description, isbn, lang, title, sub_title,
-         publisher, publish_date, created, updated FROM books WHERE id = ?1"#;
+        // let query = r#"SELECT id, cover_img, description, isbn, lang, title, sub_title,
+        //  publisher, publish_date, created, updated FROM books WHERE id = ?1"#;
 
-        let book = self.conn.query_row(query, [id.borrow()], |row| {
+        let query = format!("{} WHERE id = ?1", SELECT_BOOKS_QUERY);
+
+        let book = self.conn.query_row(&query, [id.borrow()], |row| {
             Ok(Book {
                 authors: load_authors_of_book(&self.conn, id.borrow())?,
                 cover_img: row.get("cover_img")?,
@@ -312,38 +327,93 @@ fn convert_timestamp(timestamp: i64) -> Result<DateTime<Utc>, BookError> {
     }
 }
 
+pub trait ToQuery {
+    fn to_query(&self) -> String;
+}
+
+impl ToQuery for SortDescriptor {
+    fn to_query(&self) -> String {
+        match self.1 {
+            SortOrder::Asc => format!("{} ASC", self.0),
+            SortOrder::Desc => format!("{} DESC", self.0),
+        }
+    }
+}
+
+// // Implementation for the ConfigInitialized state.
+// impl SearchConfig<ConfigInitialized> {
+//     /// Builds a sqlite query with given base query and a function which
+//     /// takes a search text and returns part of a where clause.
+//     /// For example: `id = ?1 AND name LIKE ?2`
+//     pub fn as_sqlite_query<Q, F>(&self, base_query: Q, f: F) -> String
+//     where
+//         Q: AsRef<str>,
+//         F: FnOnce(&str) -> String,
+//     {
+//         let mut query = format!("{} ", base_query.as_ref());
+//         if !self.text.is_empty() {
+//             query.push_str(format!("WHERE {} ", f(&self.text)).as_ref());
+//         }
+
+//         if let Some(sort) = self.sort.as_ref() {
+//             query.push_str("ORDER BY ");
+//             query.push_str(
+//                 sort.iter()
+//                     .map(|d| d.to_query())
+//                     .collect::<Vec<String>>()
+//                     .join(", ")
+//                     .as_ref(),
+//             );
+//             query.push(' ');
+//         }
+
+//         if let Some(l) = &self.take {
+//             query.push_str(format!("LIMIT {} ", l).as_ref());
+//         }
+
+//         if let Some(o) = &self.skip {
+//             query.push_str(format!("OFFSET {}", o).as_ref());
+//         }
+
+//         query
+//     }
+// }
+
 #[cfg(test)]
 mod tests {
-    use std::error::Error;
     use super::SqliteStore;
-    use crate::books::models::{SearchConfig, ConfigInitialized};
     use crate::books::models::{Book, BookDB};
+    use crate::books::models::{ConfigInitialized, SearchConfig};
     use chrono::prelude::*;
     use chrono::Utc;
+    use std::error::Error;
 
     type Result<T = (), E = Box<dyn Error>> = std::result::Result<T, E>;
-
 
     #[test]
     fn fetch_books() -> Result {
         let mut db = SqliteStore::new("db_file")?;
-        let cfg = SearchConfig::new("txt");
 
-                
-        db.fetch_books(cfg.build())?;
-    
+        let books = db.fetch_books(SearchConfig::new("").build())?;
+        assert_eq!(books.total, 3);
+        assert_eq!(books.skipped, 0);
+        assert_eq!(books.items.len(), 3);
+
+        let partial_books = db.fetch_books(SearchConfig::new("").use_skip(1).build())?;
+        assert_eq!(partial_books.total, 2);
+        assert_eq!(partial_books.skipped, 1);
+        assert_eq!(partial_books.items.len(), 2);
 
         Ok(())
-
     }
 
     #[test]
     fn delete_book_successfully() -> Result {
         let mut db = SqliteStore::new("db_file")?;
-    
-        db.delete_book_by_id(1)?;        
+
+        db.delete_book_by_id(1)?;
         assert!(db.get_book(1).is_err());
-        
+
         Ok(())
     }
 
@@ -389,5 +459,5 @@ mod tests {
         assert_eq!(new_book.tags, saved_book.tags);
 
         Ok(())
-    }    
+    }
 }

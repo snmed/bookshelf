@@ -7,17 +7,34 @@
 // TODO: Remove after initial implementation is done.
 #![allow(dead_code)]
 
-
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
 use std::fmt;
 use std::marker::PhantomData;
 
+use std::ops::Add;
 use std::{error::Error, fmt::Display};
 
+/// A simple macro to create an array of SortDescriptors.
+/// Educational purpose.
+#[macro_export]
+macro_rules! sort_desc {
+    (@Ord $ord:literal) => {$ord.into()};
+    (@Ord $ord:expr) => {$ord};
+    ($($col:expr, $ord:expr),+) => {
+        vec![
+        $(
+            SortDescriptor($col.into(), sort_desc!(@Ord $ord))
+        ),+
+        ]
+    };
+
+}
+
+
 /// All known error for the books module.
-/// Probably use crate `thiserror` as soon as familiar 
+/// Probably use crate `thiserror` as soon as familiar
 /// enough with error handling and implementation.
 #[non_exhaustive]
 #[derive(Debug)]
@@ -27,17 +44,16 @@ pub enum BookError {
     /// Error is returned if no item with given id were found.
     NotFound,
     /// An error returned from the underlying database runtime.
-    DBError(Box<dyn std::error::Error>),    
+    DBError(Box<dyn std::error::Error>),
     /// An error if authors is empty.
-    EmptyAuthors
+    EmptyAuthors,
 }
 
 impl Error for BookError {}
 unsafe impl Send for BookError {}
 unsafe impl Sync for BookError {}
 
-
-pub type Result<T, E = BookError> = core::result::Result<T,E>;
+pub type Result<T, E = BookError> = core::result::Result<T, E>;
 
 impl Display for BookError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -72,9 +88,11 @@ impl From<&str> for SortOrder {
     }
 }
 
+
+
 /// SortDescriptor describes a column and which sort order to use.
 #[derive(Debug, Deserialize, Serialize)]
-pub struct SortDescriptor(String, SortOrder);
+pub struct SortDescriptor(pub String, pub SortOrder);
 
 /// StoreResult a generic store result.
 #[derive(Debug, Deserialize, Serialize)]
@@ -84,7 +102,7 @@ pub struct StoreResult<T> {
     pub items: Vec<T>,
 }
 
-pub trait SearchParam: AsRef<SearchConfig>{}
+pub trait SearchParam: AsRef<SearchConfig> {}
 
 pub struct ConfigNew;
 pub struct ConfigInitialized;
@@ -117,13 +135,11 @@ impl<State> fmt::Debug for SearchConfig<State> {
     }
 }
 
-
 impl<State> AsRef<SearchConfig<State>> for SearchConfig<State> {
     fn as_ref(&self) -> &SearchConfig<State> {
         self
     }
 }
-
 
 // Implementation for the ConfigNew state.
 // As stated before, this is only for educational purpose and could
@@ -172,9 +188,6 @@ impl SearchConfig<ConfigNew> {
     }
 }
 
-
-
-
 /// BookDB provides functions to store and retrieve books from the underlying data store.
 /// For me as beginner, I use [core::Result] to get familiar with rust std. But in future,
 /// I might use a type alias like `type Result<T, E = BookError> = core::Result<T, E>;`.
@@ -184,10 +197,16 @@ pub trait BookDB {
     fn update_book(&mut self, book: &mut Book) -> Result<()>;
     fn delete_book(&mut self, book: &Book) -> Result<()>;
     fn delete_book_by_id<T: Borrow<i64>>(&mut self, id: T) -> Result<()>;
-    fn fetch_books<T: AsRef<SearchConfig<ConfigInitialized>>>(&mut self, search: T) -> Result<StoreResult<Book>>;
+    fn fetch_books<T: AsRef<SearchConfig<ConfigInitialized>>>(
+        &mut self,
+        search: T,
+    ) -> Result<StoreResult<Book>>;
 
     fn get_tags(&mut self, pattern: &str) -> Result<StoreResult<String>>;
-    fn get_authors<T: AsRef<SearchConfig<ConfigInitialized>>>(&mut self, search: T) -> Result<StoreResult<String>>;
+    fn get_authors<T: AsRef<SearchConfig<ConfigInitialized>>>(
+        &mut self,
+        search: T,
+    ) -> Result<StoreResult<String>>;
 }
 
 /// A book representation for the bookshelf application.
@@ -210,9 +229,11 @@ pub struct Book {
     pub updated: DateTime<Utc>,
 }
 
+
+
 #[cfg(test)]
 mod tests {
-    use super::{SearchConfig, SortDescriptor, SortOrder};
+    use super::SortOrder;
 
     // This test exists only to get familiar with Rust testing
     #[test]
