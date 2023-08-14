@@ -13,7 +13,6 @@ use std::borrow::Borrow;
 use std::fmt;
 use std::marker::PhantomData;
 
-use std::ops::Add;
 use std::{error::Error, fmt::Display};
 
 /// A simple macro to create an array of SortDescriptors.
@@ -95,7 +94,7 @@ impl From<&str> for SortOrder {
 pub struct SortDescriptor(pub String, pub SortOrder);
 
 /// StoreResult a generic store result.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Default)]
 pub struct StoreResult<T> {
     pub total: u64,
     pub skipped: u64,
@@ -132,6 +131,12 @@ impl<State> fmt::Debug for SearchConfig<State> {
             .field("take", &self.take)
             .field("text", &self.text)
             .finish()
+    }
+}
+
+impl<T: AsRef<str>> From<T> for SearchConfig<ConfigInitialized> {
+    fn from(value: T) -> Self {
+        SearchConfig::new(value.as_ref()).build()
     }
 }
 
@@ -185,6 +190,24 @@ impl SearchConfig<ConfigNew> {
     pub fn use_sort(mut self, sort: Vec<SortDescriptor>) -> Self {
         self.sort = Some(sort);
         self
+    }
+}
+
+impl SearchConfig<ConfigInitialized> {
+    pub fn get_take(&self) -> Option<&u64> {
+        self.take.as_ref()
+    }
+
+    pub fn get_skip(&self) -> Option<&u64> {
+        self.skip.as_ref()
+    }
+
+    pub fn get_sort_desc(&self) -> Option<&Vec<SortDescriptor>> {
+        self.sort.as_ref()
+    }
+
+    pub fn get_text(&self) -> &str {
+        &self.text
     }
 }
 

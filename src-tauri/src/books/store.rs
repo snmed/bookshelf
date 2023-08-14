@@ -6,14 +6,15 @@
 // TODO: Remove after initial implementation is done.
 #![allow(dead_code)]
 
-use std::borrow::Borrow;
+use std::{borrow::Borrow, sync::Arc};
 
 use chrono::{DateTime, TimeZone, Utc};
 use rusqlite::{named_params, params, params_from_iter, Connection};
 use rusqlite_migration::{Migrations, M};
 
 use super::models::{
-    Book, BookDB, BookError, ConfigInitialized, Result, SearchConfig, SearchParam, StoreResult, SortOrder, SortDescriptor,
+    Book, BookDB, BookError, ConfigInitialized, Result, SearchConfig, SearchParam, SortDescriptor,
+    SortOrder, StoreResult,
 };
 
 const SELECT_BOOKS_QUERY: &str = r#"SELECT id, cover_img, description, isbn, lang, title, sub_title,
@@ -188,6 +189,26 @@ impl BookDB for SqliteStore {
         search: T,
     ) -> Result<StoreResult<String>> {
         let query = r"SELECT DISTINCT name FROM authors".to_owned();
+        let mut stmt = self.conn.prepare(&query)?;
+
+        let b = search
+            .as_ref()
+            .get_take()
+            .ok_or(BookError::Generic("my fault".to_string()))?;
+
+        let myfn = move || {
+            println!(">>>>> {}", b);
+        };
+
+        myfn();
+        println!("<< {}", *b);
+        println!("<< {}", *b);
+        let c = search
+            .as_ref()
+            .get_take()
+            .ok_or(BookError::Generic("my fault".to_string()))?;
+
+        println!("<< {}", *c);
 
         todo!()
     }
@@ -196,9 +217,6 @@ impl BookDB for SqliteStore {
     where
         T: Borrow<i64>,
     {
-        // let query = r#"SELECT id, cover_img, description, isbn, lang, title, sub_title,
-        //  publisher, publish_date, created, updated FROM books WHERE id = ?1"#;
-
         let query = format!("{} WHERE id = ?1", SELECT_BOOKS_QUERY);
 
         let book = self.conn.query_row(&query, [id.borrow()], |row| {
@@ -327,15 +345,148 @@ fn convert_timestamp(timestamp: i64) -> Result<DateTime<Utc>, BookError> {
     }
 }
 
-pub trait ToQuery {
-    fn to_query(&self) -> String;
+// pub trait ToQuery {
+//     fn to_query(&self) -> String;
+// }
+
+// impl ToQuery for SortDescriptor {
+//     fn to_query(&self) -> String {
+//         match self.1 {
+//             SortOrder::Asc => format!("{} ASC", self.0),
+//             SortOrder::Desc => format!("{} DESC", self.0),
+//         }
+//     }
+// }
+
+struct QueryBuilder<'a> {
+    query: &'a str,
+    text: &'a str,
+    filter: Option<String>,
+    skipped: &'a u64,
+    sort_limit: String,
+    search_params: Option<&'a [&'a dyn rusqlite::ToSql]>,
+    sort_params: Vec<&'a str>,
 }
 
-impl ToQuery for SortDescriptor {
-    fn to_query(&self) -> String {
-        match self.1 {
-            SortOrder::Asc => format!("{} ASC", self.0),
-            SortOrder::Desc => format!("{} DESC", self.0),
+impl<'a> QueryBuilder<'a> {
+    fn new(query: &'a str, config: &'a SearchConfig<ConfigInitialized>) -> Self {
+        let mut sf = "".to_string();
+        let mut sp: Vec<&'a str> = Vec::new();
+
+        if let Some(sort) = config.get_sort_desc() {
+            if !sort.is_empty() {
+                sf.push_str("ORDER BY");
+                for d in sort {
+                    match d.1 {
+                        SortOrder::Asc => sf.push_str(" ? ASC,"),
+                        SortOrder::Desc => sf.push_str(" ? DESC,"),
+                    }
+                    sp.push(d.0.as_ref());
+                }
+                sf.pop();
+                sf.push(' ');
+            }
+        }
+
+        let mut skipped = &0u64;
+        if let Some(l) = config.get_take() {
+            match config.get_skip() {
+                Some(s) => { 
+                    sf.push_str(format!("LIMIT {}, {}", l, s).as_ref());
+                    skipped = s;
+                },
+                None => sf.push_str(format!("LIMIT {}", l).as_ref()),
+            }
+        }
+
+        Self {
+            query,
+            text: config.get_text(),
+            skipped,
+            filter: None,
+            search_params: None,
+            sort_params: sp,
+            sort_limit: sf,
+        }
+    }
+
+    fn build_where_clause<F>(&mut self, transform: F)
+    where
+        F: FnOnce(&str) -> (String, Vec<&dyn rusqlite::ToSql>),
+    {
+        if !self.text.is_empty() {
+            let fl = transform(self.text);
+            if fl.0.is_empty() {
+                return;
+            }
+
+            self.filter = Some(format!("WHERE {}", fl.0));
+            self.search_params = Some(fl.1);
+        }
+    }
+
+    fn fetch<T, F>(&'a self, conn: &Connection, result: &mut StoreResult<T>, map: F) -> Result<()> 
+    where
+     F: FnMut(&rusqlite::Row) -> rusqlite::Result<T> {
+        let mut query = self.query.to_owned();
+
+        if let Some(f) = &self.filter {
+            query.push(' ');
+            query.push_str(f);
+        }
+
+        let count = if let Some(p) = self.search_params {
+            conn.query_row(
+                format!("SELECT COUNT(*) FROM ({});", query).as_ref(),
+                p,
+                |row| row.get::<usize, u64>(0),
+            )?
+        } else {
+            conn.query_row(
+                format!("SELECT COUNT(*) FROM ({});", query).as_ref(),
+                [],
+                |row| row.get::<usize, u64>(0),
+            )?
+        };
+
+        query.push(' ');
+        query.push_str(&self.sort_limit);
+
+        let sort_params = &self
+            .sort_params
+            .iter()
+            .map(|i| i as &dyn rusqlite::ToSql)
+            .collect::<Vec<&dyn rusqlite::ToSql>>()[..];
+
+        let all_params = match self.search_params {
+            Some(p) => params_from_iter(p.iter().chain(sort_params)),
+            None => params_from_iter(params![].iter().chain(sort_params)),
+        };
+
+        let mut stmt = conn.prepare(&query)?;
+
+        let res =  stmt.query_map(all_params, map)?;
+        // let mut rows = stmt.query(all_params).map(|x| x)?;
+        // while let Some(row) = rows.next()? {
+        //     println!(">>>>> {}", row.get::<&str, String>("title")?);
+        // }
+        result.total = count;
+        result.skipped = *self.skipped;
+        
+        for item in res {
+            result.items.push(item?);
+        }
+
+        Ok(())
+    }
+
+    fn show(&'a self) {
+        println!("{:?}", self.filter);
+        for i in self.search_params.unwrap() {
+            let b = i.to_sql().ok();
+            let c = b.expect("asdasdasdsa ");
+
+            println!("<<< {:?}", c);
         }
     }
 }
@@ -381,14 +532,88 @@ impl ToQuery for SortDescriptor {
 
 #[cfg(test)]
 mod tests {
-    use super::SqliteStore;
-    use crate::books::models::{Book, BookDB};
+    use super::{QueryBuilder, SqliteStore, load_authors_of_book, load_tags_of_book, convert_timestamp};
+    use crate::books::models::{Book, BookDB, SortDescriptor, StoreResult};
     use crate::books::models::{ConfigInitialized, SearchConfig};
+    use crate::sort_desc;
     use chrono::prelude::*;
     use chrono::Utc;
+    use rusqlite::{named_params, params, params_from_iter};
     use std::error::Error;
 
     type Result<T = (), E = Box<dyn Error>> = std::result::Result<T, E>;
+
+    #[test]
+    fn myfn() -> Result {
+        let mut db = SqliteStore::new("db_file")?;
+
+        // let _ = db.get_authors(SearchConfig::new("").use_take(12).build())?;
+
+        // let c = named_params! {
+        //     "sd": 42
+        // };
+
+        // let v = params![42 ," sd"];
+
+        // let b = params_from_iter(v);
+
+        let cfg = SearchConfig::new("salander")
+        .use_take(1).use_skip(2)
+            .use_sort(sort_desc!(
+                "title",
+                "asc",
+                "sub_title",
+                "desc",
+                "rating",
+                "asc"
+            ))
+            .build();
+        let mut builder = QueryBuilder::new("SELECT * FROM books", &cfg);
+        builder.build_where_clause(|txt|{
+            ("'%?%'".to_string(), params!["txt".to_owned()])
+        });
+                
+        let mut res: StoreResult<Book> = StoreResult::default();
+        builder.fetch(&db.conn, &mut res, |row| {
+            let id: i64 = row.get("id")?;
+            Ok(Book { 
+                authors: load_authors_of_book(&db.conn, &id)?,
+                cover_img: row.get("cover_img")?,
+                description: row.get("description")?,
+                isbn: row.get("isbn")?,
+                lang: row.get("lang")?,
+                tags: load_tags_of_book(&db.conn, &id).map(|v| match v.len() {
+                    0 => None,
+                    _ => Some(v),
+                })?,
+                title: row.get("title")?,
+                sub_title: row.get("sub_title")?,
+                publisher: row.get("publisher")?,
+                publish_date: row
+                    .get::<&str, i64>("publish_date")
+                    .map(|r| {
+                        convert_timestamp(r)
+                            .expect("Conversion database integer to DateTime failed")
+                    })
+                    .ok(),
+                id: row.get("id")?,
+                created: convert_timestamp(row.get::<&str, i64>("created")?)
+                    .expect("Conversion database integer to DateTime failed"),
+                updated: convert_timestamp(row.get::<&str, i64>("updated")?)
+                    .expect("Conversion database integer to DateTime failed"),
+
+            })
+        })?;
+
+        println!(">>>>>> {:?}", res);
+        // let mut stmt = db.conn.prepare("SELECT * FROM books OFFSET 11")?;
+        // let mut rows = stmt.query(params![])?;
+        // while let Some(row) = rows.next()?  {
+        //     println!(">>>>> {}", row.get::<&str, String>("title")?);
+        // }
+
+        Ok(())
+    }
 
     #[test]
     fn fetch_books() -> Result {
