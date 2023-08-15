@@ -177,16 +177,22 @@ impl SearchConfig<ConfigNew> {
         }
     }
 
-    pub fn use_skip(mut self, skip: u64) -> Self {
+    /// How many pages should be skipped. Only used if
+    /// also `use_take` were specified. Example:
+    /// If `use_take(20).use_skip_page(3)` were called,
+    /// first 60 items will be skipped.
+    pub fn use_skip_page(mut self, skip: u64) -> Self {
         self.skip = Some(skip);
         self
     }
 
+    /// Specifies how many items should be returned.
     pub fn use_take(mut self, take: u64) -> Self {
         self.take = Some(take);
         self
     }
 
+    /// Define how items should be sorted.
     pub fn use_sort(mut self, sort: Vec<SortDescriptor>) -> Self {
         self.sort = Some(sort);
         self
@@ -198,7 +204,7 @@ impl SearchConfig<ConfigInitialized> {
         self.take.as_ref()
     }
 
-    pub fn get_skip(&self) -> Option<&u64> {
+    pub fn get_skip_page(&self) -> Option<&u64> {
         self.skip.as_ref()
     }
 
