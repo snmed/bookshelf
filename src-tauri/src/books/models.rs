@@ -24,7 +24,7 @@ macro_rules! sort_desc {
     ($($col:expr, $ord:expr),+) => {
         vec![
         $(
-            SortDescriptor($col.into(), sort_desc!(@Ord $ord))
+            crate::books::models::SortDescriptor($col.into(), sort_desc!(@Ord $ord))
         ),+
         ]
     };
@@ -101,8 +101,6 @@ pub struct StoreResult<T> {
     pub items: Vec<T>,
 }
 
-pub trait SearchParam: AsRef<SearchConfig> {}
-
 pub struct ConfigNew;
 pub struct ConfigInitialized;
 
@@ -143,6 +141,12 @@ impl<T: AsRef<str>> From<T> for SearchConfig<ConfigInitialized> {
 impl<State> AsRef<SearchConfig<State>> for SearchConfig<State> {
     fn as_ref(&self) -> &SearchConfig<State> {
         self
+    }
+}
+
+impl From<SearchConfig<ConfigNew>> for SearchConfig<ConfigInitialized> {
+    fn from(value: SearchConfig<ConfigNew>) -> Self {
+        value.build()
     }
 }
 
@@ -226,15 +230,15 @@ pub trait BookDB {
     fn update_book(&mut self, book: &mut Book) -> Result<()>;
     fn delete_book(&mut self, book: &Book) -> Result<()>;
     fn delete_book_by_id<T: Borrow<i64>>(&mut self, id: T) -> Result<()>;
-    fn fetch_books<T: AsRef<SearchConfig<ConfigInitialized>>>(
+    fn fetch_books(
         &mut self,
-        search: T,
+        search: SearchConfig<ConfigInitialized>,
     ) -> Result<StoreResult<Book>>;
 
-    fn get_tags(&mut self, pattern: &str) -> Result<StoreResult<String>>;
-    fn get_authors<T: AsRef<SearchConfig<ConfigInitialized>>>(
+    fn get_tags(&mut self, search: SearchConfig<ConfigInitialized>) -> Result<StoreResult<String>>;
+    fn get_authors(
         &mut self,
-        search: T,
+        search: SearchConfig<ConfigInitialized>,
     ) -> Result<StoreResult<String>>;
 }
 

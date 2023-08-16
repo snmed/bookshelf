@@ -18,6 +18,8 @@ use super::models::{
 
 const SELECT_BOOKS_QUERY: &str = r#"SELECT id, cover_img, description, isbn, lang, title, sub_title,
 publisher, publish_date, created, updated FROM books"#;
+const SELECT_AUTHORS_QUERY: &str = "SELECT DISTINCT name FROM authors";
+const SELECT_TAGS_QUERY: &str = "SELECT DISTINCT tag FROM tags";
 
 
 /// Maps a sqlite row to a Book.
@@ -206,30 +208,45 @@ impl BookDB for SqliteStore {
         Ok(())
     }
 
-    fn fetch_books<T: AsRef<SearchConfig<ConfigInitialized>>>(
+    fn fetch_books(
         &mut self,
-        search: T,
+        search: SearchConfig<ConfigInitialized>,
     ) -> Result<StoreResult<Book>> {
         todo!()
     }
 
-    fn get_tags(&mut self, pattern: &str) -> Result<StoreResult<String>> {
-        todo!()
-    }
-
-    fn get_authors<T: AsRef<SearchConfig<ConfigInitialized>>>(
-        &mut self,
-        search: T,
-    ) -> Result<StoreResult<String>> {
-        let query = r"SELECT DISTINCT name FROM authors".to_owned();
-        let mut builder = QueryBuilder::new(&query, search.as_ref());
+    /// Gets a result of stored tags.
+    /// TODO: USe FTS5 for improve the performance of this naive implementation.
+    fn get_tags(&mut self, search: SearchConfig<ConfigInitialized>) -> Result<StoreResult<String>> {
+        let mut builder = QueryBuilder::new(&SELECT_TAGS_QUERY, search.as_ref());
         builder.use_where_clause(|txt| {
-            let parts: Vec<String> = txt.split(' ').map(|s| format!("%{}%", s)).collect();
-            // TODO
-            ("".to_owned(), parts)
+            ("tag LIKE ?".to_owned(), vec![format!("%{}%", txt)])
         });
 
-        todo!()
+        let mut authors: StoreResult<String> = StoreResult::default();
+        builder.fetch(&self.conn, &mut authors, |row| row.get::<&str, String>("tag"))?;
+        
+        Ok(authors)
+    }
+
+
+    /// Gets a result of stored authores.
+    /// TODO: USe FTS5 for improve the performance of this naive implementation.
+    fn get_authors(
+        &mut self,
+        search: SearchConfig<ConfigInitialized>,
+    ) -> Result<StoreResult<String>> {      
+        let mut builder = QueryBuilder::new(&SELECT_AUTHORS_QUERY, search.as_ref());
+        builder.use_where_clause(|txt| {
+            let parts: Vec<String> = txt.split(' ').map(|s| format!("%{}%", s)).collect();
+            let q = (0..parts.len()).map(|_| "name LIKE ?").collect::<Vec<&str>>().join(" AND ");
+            (q, parts)
+        });
+
+        let mut authors: StoreResult<String> = StoreResult::default();
+        builder.fetch(&self.conn, &mut authors, |row| row.get::<&str, String>("name"))?;
+        
+        Ok(authors)
     }
 
     fn get_book<T>(&mut self, id: T) -> Result<Book>
@@ -474,8 +491,9 @@ impl<'a> QueryBuilder<'a> {
 #[cfg(test)]
 mod tests {
     use super::SqliteStore;
-    use crate::books::models::{Book, BookDB};
+    use crate::books::models::{Book, BookDB, SortOrder};
     use crate::books::models::SearchConfig;
+    use crate::sort_desc;
     
     use chrono::prelude::*;
     use chrono::Utc;
@@ -490,7 +508,10 @@ mod tests {
 
         //let b = format!("{}", bla!("MEIN MACRO:", " -- ", "asdasd", "12", "SUPERDUPER", "and", "2345345", 11));
 
-        //println!(">>>>>>> {}",b);
+        println!(">>>>>>> {:?}", db.get_tags(SearchConfig::new("rel").use_sort(sort_desc!("tag", "asc")).build()));
+        
+
+
         Ok(())
     }
 
