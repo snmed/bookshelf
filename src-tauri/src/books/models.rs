@@ -24,7 +24,7 @@ macro_rules! sort_desc {
     ($($col:expr, $ord:expr),+) => {
         vec![
         $(
-            crate::books::models::SortDescriptor($col.into(), sort_desc!(@Ord $ord))
+            $crate::books::models::SortDescriptor($col.into(), sort_desc!(@Ord $ord))
         ),+
         ]
     };

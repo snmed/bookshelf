@@ -6,10 +6,10 @@
 // TODO: Remove after initial implementation is done.
 #![allow(dead_code)]
 
-use std::borrow::Borrow;
+use std::{borrow::Borrow, ops::Add};
 
 use chrono::{DateTime, TimeZone, Utc};
-use rusqlite::{named_params, params, params_from_iter, Connection, ToSql};
+use rusqlite::{named_params, params, Connection, ToSql};
 use rusqlite_migration::{Migrations, M};
 
 use super::models::{
@@ -20,7 +20,6 @@ const SELECT_BOOKS_QUERY: &str = r#"SELECT id, cover_img, description, isbn, lan
 publisher, publish_date, created, updated FROM books"#;
 const SELECT_AUTHORS_QUERY: &str = "SELECT DISTINCT name FROM authors";
 const SELECT_TAGS_QUERY: &str = "SELECT DISTINCT tag FROM tags";
-
 
 /// Maps a sqlite row to a Book.
 /// Requires a connection reference,
@@ -212,40 +211,76 @@ impl BookDB for SqliteStore {
         &mut self,
         search: SearchConfig<ConfigInitialized>,
     ) -> Result<StoreResult<Book>> {
-        todo!()
+        // This is quite naive implementation, use FTS5 to improve search performance.
+        let query = if search.get_text() != "" {
+            SELECT_BOOKS_QUERY.to_owned().add(
+                r#" WHERE id IN (
+                SELECT DISTINCT B.id
+                FROM books as B
+                    LEFT JOIN authors AS A ON A.book_id = B.id
+                    LEFT JOIN tags AS T ON T.book_id = B.id
+                WHERE B.title LIKE ?
+                    OR B.sub_title LIKE ?
+                    OR B.publisher LIKE ?
+                    OR B.isbn LIKE ?
+                    OR B.description LIKE ?
+                    OR A.name LIKE ?
+                    OR T.tag LIKE ?
+            );"#,
+            )
+        } else {
+            SELECT_BOOKS_QUERY.to_owned()
+        };
+
+        let mut builder = QueryBuilder::new(&query, &search);
+        let txt = format!("%{}%", search.get_text());
+        if search.get_text() != "" {
+            builder.use_params(params![
+                &txt, &txt, &txt, &txt, &txt, &txt, &txt, &txt, &txt
+            ])?;
+        }
+
+        let mut books: StoreResult<Book> = StoreResult::default();
+        //builder.fetch(&self.conn, &mut books, |txt|)
+
+        Ok(books)
     }
 
     /// Gets a result of stored tags.
     /// TODO: USe FTS5 for improve the performance of this naive implementation.
     fn get_tags(&mut self, search: SearchConfig<ConfigInitialized>) -> Result<StoreResult<String>> {
-        let mut builder = QueryBuilder::new(&SELECT_TAGS_QUERY, search.as_ref());
-        builder.use_where_clause(|txt| {
-            ("tag LIKE ?".to_owned(), vec![format!("%{}%", txt)])
-        });
+        let mut builder = QueryBuilder::new(SELECT_TAGS_QUERY, search.as_ref());
+        builder.use_where_clause(|txt| ("tag LIKE ?".to_owned(), vec![format!("%{}%", txt)]))?;
 
         let mut authors: StoreResult<String> = StoreResult::default();
-        builder.fetch(&self.conn, &mut authors, |row| row.get::<&str, String>("tag"))?;
-        
+        builder.fetch(&self.conn, &mut authors, |row| {
+            row.get::<&str, String>("tag")
+        })?;
+
         Ok(authors)
     }
-
 
     /// Gets a result of stored authores.
     /// TODO: USe FTS5 for improve the performance of this naive implementation.
     fn get_authors(
         &mut self,
         search: SearchConfig<ConfigInitialized>,
-    ) -> Result<StoreResult<String>> {      
-        let mut builder = QueryBuilder::new(&SELECT_AUTHORS_QUERY, search.as_ref());
+    ) -> Result<StoreResult<String>> {
+        let mut builder = QueryBuilder::new(SELECT_AUTHORS_QUERY, search.as_ref());
         builder.use_where_clause(|txt| {
             let parts: Vec<String> = txt.split(' ').map(|s| format!("%{}%", s)).collect();
-            let q = (0..parts.len()).map(|_| "name LIKE ?").collect::<Vec<&str>>().join(" AND ");
+            let q = (0..parts.len())
+                .map(|_| "name LIKE ?")
+                .collect::<Vec<&str>>()
+                .join(" AND ");
             (q, parts)
-        });
+        })?;
 
         let mut authors: StoreResult<String> = StoreResult::default();
-        builder.fetch(&self.conn, &mut authors, |row| row.get::<&str, String>("name"))?;
-        
+        builder.fetch(&self.conn, &mut authors, |row| {
+            row.get::<&str, String>("name")
+        })?;
+
         Ok(authors)
     }
 
@@ -363,23 +398,21 @@ struct QueryBuilder<'a> {
     skipped: &'a u64,
     sort_limit: String,
     search_params: Option<Vec<String>>,
-    sort_params: Vec<&'a str>,
+    params: Option<&'a [&'a dyn ToSql]>,
 }
 
 impl<'a> QueryBuilder<'a> {
     fn new(query: &'a str, config: &'a SearchConfig<ConfigInitialized>) -> Self {
         let mut sf = "".to_string();
-        let mut sp: Vec<&'a str> = Vec::new();
 
         if let Some(sort) = config.get_sort_desc() {
             if !sort.is_empty() {
                 sf.push_str("ORDER BY");
                 for d in sort {
                     match d.1 {
-                        SortOrder::Asc => sf.push_str(" ? ASC,"),
-                        SortOrder::Desc => sf.push_str(" ? DESC,"),
+                        SortOrder::Asc => sf.push_str(format!(" {} ASC,", d.0).as_ref()),
+                        SortOrder::Desc => sf.push_str(format!(" {} DESC,", d.0).as_ref()),
                     }
-                    sp.push(d.0.as_ref());
                 }
                 sf.pop();
                 sf.push(' ');
@@ -403,32 +436,53 @@ impl<'a> QueryBuilder<'a> {
             skipped,
             filter: None,
             search_params: None,
-            sort_params: sp,
             sort_limit: sf,
+            params: None,
         }
     }
 
     /// Use given function to construct the where clause.
     /// Uses first value of tuple to construct the where clause ` WHERE [first value of tuple]` and
     /// second argument is used as parameter in the given order.
+    /// Use either `use_params` or `use_where_clause`.
     ///
     /// Example:
     /// ```rust
     /// builder.use_where_clause(|txt| ("name LIKE ? AND typ = ? ".to_string(), vec![txt.to_owned(), "employee".to_owned()]));
     /// ```
-    fn use_where_clause<F>(&mut self, transform: F)
+    fn use_where_clause<F>(&mut self, transform: F) -> Result<()>
     where
         F: FnOnce(&str) -> (String, Vec<String>),
     {
+        if self.params.is_some() {
+            return Err(BookError::Generic(
+                "Either use 'use_where_clause' or 'use_params'".to_owned(),
+            ));
+        }
+
         if !self.text.is_empty() {
             let fl = transform(self.text);
             if fl.0.is_empty() {
-                return;
+                return Ok(());
             }
 
             self.filter = Some(format!("WHERE {}", fl.0));
             self.search_params = Some(fl.1);
         }
+
+        Ok(())
+    }
+
+    /// Use given parameters for constructed query. Use either `use_params` or `use_where_clause`.
+    fn use_params(&mut self, params: &'a [&'a dyn ToSql]) -> Result<()> {
+        if self.filter.is_some() {
+            return Err(BookError::Generic(
+                "Either use 'use_where_clause' or 'use_params'".to_owned(),
+            ));
+        }
+
+        self.params = Some(params);
+        Ok(())
     }
 
     /// Fetch queries the database with given connection and fills passed result struct.
@@ -462,21 +516,23 @@ impl<'a> QueryBuilder<'a> {
         query.push(' ');
         query.push_str(&self.sort_limit);
 
-        let mut all_params: Vec<&dyn ToSql> = Vec::new();
-        if let Some(e) = &self.search_params {
-            for (pos, _) in e.iter().enumerate() {
-                all_params.push(&e[pos]);
+        let mut clause_params: Vec<&dyn ToSql> = Vec::new();
+        let all_params = {
+            if let Some(e) = &self.search_params {
+                for (pos, _) in e.iter().enumerate() {
+                    clause_params.push(&e[pos]);
+                }
+                &clause_params[..]
+            } else if let Some(p) = self.params {
+                p
+            } else {
+                params![]
             }
-        }
+        };
 
-        for (pos, _) in self.sort_params.iter().enumerate() {
-            all_params.push(&self.sort_params[pos])
-        }
-
-        let params_iter = params_from_iter(all_params);
         let mut stmt = conn.prepare(&query)?;
 
-        let res = stmt.query_map(params_iter, map)?;
+        let res = stmt.query_map(all_params, map)?;
         result.total = count;
         result.skipped = *self.skipped;
 
@@ -491,13 +547,14 @@ impl<'a> QueryBuilder<'a> {
 #[cfg(test)]
 mod tests {
     use super::SqliteStore;
-    use crate::books::models::{Book, BookDB, SortOrder};
     use crate::books::models::SearchConfig;
+    use crate::books::models::{Book, BookDB, SortOrder};
     use crate::sort_desc;
-    
+
     use chrono::prelude::*;
     use chrono::Utc;
-    
+    use rusqlite::params;
+
     use std::error::Error;
 
     type Result<T = (), E = Box<dyn Error>> = std::result::Result<T, E>;
@@ -508,9 +565,53 @@ mod tests {
 
         //let b = format!("{}", bla!("MEIN MACRO:", " -- ", "asdasd", "12", "SUPERDUPER", "and", "2345345", 11));
 
-        println!(">>>>>>> {:?}", db.get_tags(SearchConfig::new("rel").use_sort(sort_desc!("tag", "asc")).build()));
-        
+        println!(
+            ">>>>>>> {:?}",
+            db.get_tags(
+                SearchConfig::new("rel")
+                    .use_sort(sort_desc!("tag", "asc"))
+                    .build()
+            )
+        );
+        println!(
+            ">>>>>>> {:?}",
+            db.get_tags(
+                SearchConfig::new("rel")
+                    .use_sort(sort_desc!("tag", "desc"))
+                    .build()
+            )
+        );
 
+        println!(
+            ">>>>>>> {:?}",
+            db.get_authors(
+                SearchConfig::new("da")
+                    .use_sort(sort_desc!("name", "asc"))
+                    .build()
+            )
+        );
+        println!(
+            ">>>>>>> {:?}",
+            db.get_authors(
+                SearchConfig::new("da")
+                    .use_sort(sort_desc!("name", "desc"))
+                    .build()
+            )
+        );
+
+        // {
+        //     let mut stmt = db.conn.prepare("SELECT tag FROM tags WHERE tag LIKE ? ORDER BY ? ASC")?;
+
+        //     stmt.raw_bind_parameter(1, "%rel%")?;
+        //     stmt.raw_bind_parameter(2, "tag")?;
+        //     println!(" QUERY: {}", stmt.expanded_sql().unwrap_or_default());
+        //     let tags = stmt.query_and_then(params!["%rel%", "tag"], |row| row.get::<usize, String>(0) )?;
+
+        //     for t in tags {
+        //         println!(">>> Tag {}", t?);
+        //     }
+
+        // }
 
         Ok(())
     }
