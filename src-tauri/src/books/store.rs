@@ -3,8 +3,6 @@
 // Use of this source code is governed by an BSD-style
 // license that can be found in the LICENSE file.
 
-// TODO: Remove after initial implementation is done.
-#![allow(dead_code)]
 
 use std::{borrow::Borrow, ops::Add};
 
@@ -92,7 +90,7 @@ pub struct SqliteStore {
 }
 
 impl SqliteStore {
-    fn new(db_file: &str) -> Result<Self> {
+    pub fn new(db_file: &str) -> Result<Self> {
         Ok(Self {
             conn: open_sqlite_connection(db_file)?,
         })
@@ -235,13 +233,13 @@ impl BookDB for SqliteStore {
         let mut builder = QueryBuilder::new(&query, &search);
         let txt = format!("%{}%", search.get_text());
         if search.get_text() != "" {
-            builder.use_params(params![
-                &txt, &txt, &txt, &txt, &txt, &txt, &txt, &txt, &txt
-            ])?;
+            builder.use_params(vec![&txt, &txt, &txt, &txt, &txt, &txt, &txt, &txt, &txt])?;
         }
 
         let mut books: StoreResult<Book> = StoreResult::default();
-        //builder.fetch(&self.conn, &mut books, |txt|)
+        builder.fetch(&self.conn, &mut books, |row| {
+            Ok(map_sqlite_row_to_book!(&self.conn, row))
+        })?;
 
         Ok(books)
     }
@@ -398,7 +396,7 @@ struct QueryBuilder<'a> {
     skipped: &'a u64,
     sort_limit: String,
     search_params: Option<Vec<String>>,
-    params: Option<&'a [&'a dyn ToSql]>,
+    params: Option<Vec<&'a dyn ToSql>>,
 }
 
 impl<'a> QueryBuilder<'a> {
@@ -474,7 +472,7 @@ impl<'a> QueryBuilder<'a> {
     }
 
     /// Use given parameters for constructed query. Use either `use_params` or `use_where_clause`.
-    fn use_params(&mut self, params: &'a [&'a dyn ToSql]) -> Result<()> {
+    fn use_params(&mut self, params: Vec<&'a dyn ToSql>) -> Result<()> {
         if self.filter.is_some() {
             return Err(BookError::Generic(
                 "Either use 'use_where_clause' or 'use_params'".to_owned(),
@@ -523,8 +521,8 @@ impl<'a> QueryBuilder<'a> {
                     clause_params.push(&e[pos]);
                 }
                 &clause_params[..]
-            } else if let Some(p) = self.params {
-                p
+            } else if let Some(p) = &self.params {
+                &p[..]
             } else {
                 params![]
             }
@@ -548,87 +546,132 @@ impl<'a> QueryBuilder<'a> {
 mod tests {
     use super::SqliteStore;
     use crate::books::models::SearchConfig;
-    use crate::books::models::{Book, BookDB, SortOrder};
-    use crate::sort_desc;
-
+    use crate::books::models::{Book, BookDB};
     use chrono::prelude::*;
     use chrono::Utc;
-    use rusqlite::params;
-
     use std::error::Error;
 
     type Result<T = (), E = Box<dyn Error>> = std::result::Result<T, E>;
 
-    #[test]
-    fn myfn() -> Result {
-        let mut db = SqliteStore::new("db_file")?;
+    macro_rules! cmp_book {
+        (@Vec $a:expr, $b:expr, $comment:literal) => {{
+            let mut aa: Vec<String> = $a.clone();
+            let mut bb: Vec<String> = $b.clone();
+            aa.sort();
+            bb.sort();
+            assert_eq!(aa, bb);
+        }};
+        ($a:expr, $b:expr) => {
+            assert_eq!($a.id, $b.id, "Book id mismatch");
+            assert_eq!($a.cover_img, $b.cover_img, "Cover image mismatch");
+            assert_eq!($a.description, $b.description, "Description mismatch");
+            assert_eq!($a.isbn, $b.isbn, "ISBN mismatch");
+            assert_eq!($a.lang, $b.lang, "Language mismatch");
+            assert_eq!($a.title, $b.title, "Title mismatch");
+            assert_eq!($a.sub_title, $b.sub_title, "Sub title mismatch");
+            assert_eq!($a.publisher, $b.publisher, "Publisher mismatch");
+            assert_eq!($a.publish_date, $b.publish_date, "Publisher date mismatch");
 
-        //let b = format!("{}", bla!("MEIN MACRO:", " -- ", "asdasd", "12", "SUPERDUPER", "and", "2345345", 11));
+            cmp_book!(@Vec $a.authors, $b.authors, "Authors mismatched");
 
-        println!(
-            ">>>>>>> {:?}",
-            db.get_tags(
-                SearchConfig::new("rel")
-                    .use_sort(sort_desc!("tag", "asc"))
-                    .build()
-            )
-        );
-        println!(
-            ">>>>>>> {:?}",
-            db.get_tags(
-                SearchConfig::new("rel")
-                    .use_sort(sort_desc!("tag", "desc"))
-                    .build()
-            )
-        );
+            assert_eq!($a.tags.is_some(), $b.tags.is_some(), "Tags mismatch");
+            if $a.tags.is_some() {
+                cmp_book!(@Vec $a.tags.as_ref().unwrap(), $b.tags.as_ref().unwrap(), "Tags mismatched");
+            }
 
-        println!(
-            ">>>>>>> {:?}",
-            db.get_authors(
-                SearchConfig::new("da")
-                    .use_sort(sort_desc!("name", "asc"))
-                    .build()
-            )
-        );
-        println!(
-            ">>>>>>> {:?}",
-            db.get_authors(
-                SearchConfig::new("da")
-                    .use_sort(sort_desc!("name", "desc"))
-                    .build()
-            )
-        );
+        };
+    }
 
-        // {
-        //     let mut stmt = db.conn.prepare("SELECT tag FROM tags WHERE tag LIKE ? ORDER BY ? ASC")?;
+    macro_rules! cmp_vec_books {
+        ($testee:expr, $expected:expr) => {
+            assert!($testee.len() == $expected.len(), "Books count mismatch");
 
-        //     stmt.raw_bind_parameter(1, "%rel%")?;
-        //     stmt.raw_bind_parameter(2, "tag")?;
-        //     println!(" QUERY: {}", stmt.expanded_sql().unwrap_or_default());
-        //     let tags = stmt.query_and_then(params!["%rel%", "tag"], |row| row.get::<usize, String>(0) )?;
+            $expected.sort_by(|a, b| a.id.cmp(&b.id));
+            $testee.sort_by(|a, b| a.id.cmp(&b.id));
 
-        //     for t in tags {
-        //         println!(">>> Tag {}", t?);
-        //     }
-
-        // }
-
-        Ok(())
+            for (pos, item) in $testee.iter().enumerate() {
+                cmp_book!(item, $expected[pos]);
+            }
+        };
     }
 
     #[test]
     fn fetch_books() -> Result {
         let mut db = SqliteStore::new("db_file")?;
 
-        let books = db.fetch_books(SearchConfig::new("").build())?;
+        let mut books = db.fetch_books(SearchConfig::new("").build())?;
         assert_eq!(books.total, 3);
         assert_eq!(books.skipped, 0);
         assert_eq!(books.items.len(), 3);
 
-        let partial_books = db.fetch_books(SearchConfig::new("").use_skip_page(1).build())?;
-        assert_eq!(partial_books.total, 2);
+        cmp_vec_books!(
+            books.items,
+            vec![Book {
+                authors: vec!["David Lagercrantz".to_owned()],
+                cover_img: None,
+                description: Some("Lisbeth Salander is an unstoppable force!".to_owned()),
+                isbn: "9780857056429".to_owned(),
+                lang: "EN".to_owned(),
+                tags: Some(vec!["Thriller".to_owned(), "Suspense".to_owned()]),
+                title: "The Girl Who Takes an Eye for an Eye".to_owned(),
+                sub_title: None,
+                publisher: Some("McLehose Press".to_owned()),
+                publish_date: Some(Utc.timestamp_opt(1483523713, 0).unwrap()),
+                id: 1,
+
+                ..Default::default()
+            }, Book {
+                authors: vec!["Jochen Schiller".to_owned()],
+                cover_img: None,
+                description: Some("Explains mobile communications in details.".to_owned()),
+                isbn: "9780321123817".to_owned(),
+                lang: "EN".to_owned(),
+                tags: Some(vec!["Data Transmission Systems".to_owned(), "Wireless".to_owned(), "Communications".to_owned()]),
+                title: "Mobile Communications".to_owned(),
+                sub_title: Some("Second Edition".to_owned()),
+                publisher: Some("Addison Wesley".to_owned()),
+                publish_date: Some(Utc.timestamp_opt(1062150913, 0).unwrap()),
+                id: 2,
+
+                ..Default::default()
+            }, Book {
+                authors: vec!["Richard Dawkins".to_owned()],
+                cover_img: None,
+                description: Some("Richard Dawkins provozierendes Buch beseitigt jeden Zweifel an Darwins Theorie.".to_owned()),
+                isbn: "9783550087653".to_owned(),
+                lang: "DE".to_owned(),
+                tags: Some(vec!["Wissenschaft".to_owned(), "Biologie".to_owned(), "Religion".to_owned()]),
+                title: "Es gibt keine Schöpfung".to_owned(),
+                sub_title: None,
+                publisher: Some("Ullstein Verlag".to_owned()),
+                publish_date: Some(Utc.timestamp_opt(1283075713, 0).unwrap()),
+                id: 3,
+
+                ..Default::default()
+            }]
+        );
+
+        let mut partial_books =
+            db.fetch_books(SearchConfig::new("").use_take(2).use_skip_page(1).build())?;
+        assert_eq!(partial_books.total, 3);
         assert_eq!(partial_books.skipped, 1);
-        assert_eq!(partial_books.items.len(), 2);
+        assert_eq!(partial_books.items.len(), 1);
+
+        cmp_vec_books!(partial_books.items, vec![Book {
+            authors: vec!["Richard Dawkins".to_owned()],
+            cover_img: None,
+            description: Some("Richard Dawkins provozierendes Buch beseitigt jeden Zweifel an Darwins Theorie.".to_owned()),
+            isbn: "9783550087653".to_owned(),
+            lang: "DE".to_owned(),
+            tags: Some(vec!["Wissenschaft".to_owned(), "Biologie".to_owned(), "Religion".to_owned()]),
+            title: "Es gibt keine Schöpfung".to_owned(),
+            sub_title: None,
+            publisher: Some("Ullstein Verlag".to_owned()),
+            publish_date: Some(Utc.timestamp_opt(1283075713, 0).unwrap()),
+            id: 3,
+
+            ..Default::default()
+        }]);
 
         Ok(())
     }

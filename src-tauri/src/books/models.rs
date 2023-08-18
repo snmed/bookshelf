@@ -4,8 +4,6 @@
 // license that can be found in the LICENSE file.
 
 // This file contains all models used for the books module.
-// TODO: Remove after initial implementation is done.
-#![allow(dead_code)]
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

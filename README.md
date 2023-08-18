@@ -1,7 +1,13 @@
-# Tauri + Svelte + Typescript
+# Bookshelf
 
-This template should help get you started developing with Tauri, Svelte and TypeScript in Vite.
+A little Rust and Tauri project to keep track about all my owned books.
 
-## Recommended IDE Setup
+This project is mainly used to get familiar with different Rust concepts,
+but also to prevent to buy a book more than once. ;-)
 
-[VS Code](https://code.visualstudio.com/) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer).
+## Technology Stack
+
+- [Tauri](https://tauri.app/)
+- [Svelte](https://svelte.dev/)
+- [Sqlite](https://www.sqlite.org/index.html)
+- [VS Codium](https://vscodium.com/)
