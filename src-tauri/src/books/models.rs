@@ -7,7 +7,6 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::borrow::Borrow;
 use std::fmt;
 use std::marker::PhantomData;
 
@@ -222,12 +221,12 @@ impl SearchConfig<ConfigInitialized> {
 /// BookDB provides functions to store and retrieve books from the underlying data store.
 /// For me as beginner, I use [core::Result] to get familiar with rust std. But in future,
 /// I might use a type alias like `type Result<T, E = BookError> = core::Result<T, E>;`.
-pub trait BookDB {
+pub trait BookDB: Send {
     fn add_book(&mut self, book: &mut Book) -> Result<()>;
-    fn get_book<T: Borrow<i64>>(&mut self, id: T) -> Result<Book>;
+    fn get_book(&mut self, id: i64) -> Result<Book>;
     fn update_book(&mut self, book: &mut Book) -> Result<()>;
     fn delete_book(&mut self, book: &Book) -> Result<()>;
-    fn delete_book_by_id<T: Borrow<i64>>(&mut self, id: T) -> Result<()>;
+    fn delete_book_by_id(&mut self, id: i64) -> Result<()>;
     fn fetch_books(
         &mut self,
         search: SearchConfig<ConfigInitialized>,

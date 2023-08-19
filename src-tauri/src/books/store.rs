@@ -3,8 +3,7 @@
 // Use of this source code is governed by an BSD-style
 // license that can be found in the LICENSE file.
 
-
-use std::{borrow::Borrow, ops::Add};
+use std::ops::Add;
 
 use chrono::{DateTime, TimeZone, Utc};
 use rusqlite::{named_params, params, Connection, ToSql};
@@ -74,12 +73,12 @@ fn open_sqlite_connection(db_file: &str) -> Result<Connection> {
     Ok(conn)
 }
 
-#[cfg(debug_assertions)]
-fn create_sqlite_connection(_: &str) -> Result<Connection> {
-    Ok(Connection::open_in_memory()?)
-}
+// #[cfg(debug_assertions)]
+// fn create_sqlite_connection(_: &str) -> Result<Connection> {
+//     Ok(Connection::open_in_memory()?)
+// }
 
-#[cfg(not(debug_assertions))]
+// #[cfg(not(debug_assertions))]
 fn create_sqlite_connection(db_file: &str) -> Result<Connection> {
     Ok(Connection::open(db_file)?)
 }
@@ -196,12 +195,8 @@ impl BookDB for SqliteStore {
         self.delete_book_by_id(book.id)
     }
 
-    fn delete_book_by_id<T>(&mut self, id: T) -> Result<()>
-    where
-        T: Borrow<i64>,
-    {
-        self.conn
-            .execute("DELETE FROM books WHERE id = ?", [id.borrow()])?;
+    fn delete_book_by_id(&mut self, id: i64) -> Result<()> {
+        self.conn.execute("DELETE FROM books WHERE id = ?", [id])?;
         Ok(())
     }
 
@@ -282,13 +277,10 @@ impl BookDB for SqliteStore {
         Ok(authors)
     }
 
-    fn get_book<T>(&mut self, id: T) -> Result<Book>
-    where
-        T: Borrow<i64>,
-    {
+    fn get_book(&mut self, id: i64) -> Result<Book> {
         let query = format!("{} WHERE id = ?1", SELECT_BOOKS_QUERY);
 
-        let book = self.conn.query_row(&query, [id.borrow()], |row| {
+        let book = self.conn.query_row(&query, [id], |row| {
             Ok(map_sqlite_row_to_book!(&self.conn, row))
         })?;
 
