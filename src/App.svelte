@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Greet from './lib/Greet.svelte'
+  import Greet from './lib/Greet.svelte';
 </script>
 
 <main class="container">
@@ -15,17 +15,18 @@
     <a href="https://svelte.dev" target="_blank">
       <img src="/svelte.svg" class="logo svelte" alt="Svelte Logo" />
     </a>
+    <a href="#top">
+      <div class="logo svelte app">
+        <img src="/app_icon.png" alt="Bookshelf Logo" title="Einstellungen" />
+      </div>
+    </a>
   </div>
 
-  <p>
-    Click on the Tauri, Vite, and Svelte logos to learn more.
-  </p>
+  <p>Click on the Tauri, Vite, and Svelte logos to learn more.</p>
 
   <div class="row">
     <Greet />
   </div>
-
-
 </main>
 
 <style>
@@ -35,5 +36,10 @@
 
   .logo.svelte:hover {
     filter: drop-shadow(0 0 2em #ff3e00);
+  }
+
+  .logo.app > img{
+    width: 96px;
+    height: 96px;    
   }
 </style>

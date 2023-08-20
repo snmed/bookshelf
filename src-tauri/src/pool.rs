@@ -1,3 +1,8 @@
+// Copyright © 2023 Sandro Dallo
+//
+// Use of this source code is governed by an BSD-style
+// license that can be found in the LICENSE file.
+
 use std::{
     ops::{Deref, DerefMut},
     sync::{Arc, Mutex},
