@@ -56,10 +56,6 @@ impl<T: Send + ?Sized> PoolManager<T> {
     pub fn available_items(&self) -> usize {
         self.pool.0.lock().unwrap().len()
     }
-
-    pub fn to_arc(self) -> Arc<PoolManager<T>> {
-        Arc::new(self)
-    }
 }
 
 pub struct PoolItem<T: Send + ?Sized>(Option<Box<T>>, InnerPool<T>);
@@ -86,14 +82,14 @@ impl<T: Send + ?Sized> Drop for PoolItem<T> {
 
 #[cfg(test)] 
 mod tests {
-    use std::{thread, time::Duration};
+    use std::{thread, time::Duration, sync::Arc};
     use super::PoolManager;
 
     #[test]
     fn pool_test() {
-        let pool = PoolManager::new(5, || {            
+        let pool = Arc::new(PoolManager::new(5, || {            
             Box::new("Just a test")
-        }).to_arc();
+        }));
       
         let mut handles = Vec::new();
         for i in 0..15 {

@@ -12,6 +12,8 @@ use std::{
     result,
 };
 
+use crate::from_err;
+
 #[cfg(not(windows))]
 const SETTINGS_FILE: &str = ".config/bookshelf/bookshelf-settings.json";
 #[cfg(windows)]
@@ -34,17 +36,8 @@ pub enum SettingsError {
     IoError(io::Error),
 }
 
-impl From<serde_json::Error> for SettingsError {
-    fn from(value: serde_json::Error) -> Self {
-        Self::SerdeError(value)
-    }
-}
-
-impl From<io::Error> for SettingsError {
-    fn from(value: io::Error) -> Self {
-        Self::IoError(value)
-    }
-}
+from_err!(SettingsError, serde_json::Error, SerdeError);
+from_err!(SettingsError, io::Error, IoError);
 
 pub type Result<T = (), E = SettingsError> = result::Result<T, E>;
 
