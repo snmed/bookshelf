@@ -73,12 +73,12 @@ fn open_sqlite_connection(db_file: &str) -> Result<Connection> {
     Ok(conn)
 }
 
-// #[cfg(debug_assertions)]
-// fn create_sqlite_connection(_: &str) -> Result<Connection> {
-//     Ok(Connection::open_in_memory()?)
-// }
+#[cfg(debug_assertions)]
+fn create_sqlite_connection(_: &str) -> Result<Connection> {
+    Ok(Connection::open_in_memory()?)
+}
 
-// #[cfg(not(debug_assertions))]
+#[cfg(not(debug_assertions))]
 fn create_sqlite_connection(db_file: &str) -> Result<Connection> {
     Ok(Connection::open(db_file)?)
 }
