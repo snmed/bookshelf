@@ -12,6 +12,7 @@ use tauri::{api::dialog::blocking::FileDialogBuilder, State};
 
 use crate::books::models::{Book, BookError};
 use crate::books::{self, BookManager, BookPool};
+use crate::rec_pois;
 
 macro_rules! from_err_api {
     ($code:literal) => {
@@ -105,8 +106,15 @@ pub async fn create_book_db(manager: State<'_, BookManagerState>) -> Result<Stri
         .to_string_lossy()
         .into();
 
-    // TODO: Handle mutex poisoning (macro?) and log if it's happen.
-    manager.0.lock().unwrap().add_pool(&key, pool)?;
+    // TODO: Handle mutex poisoning (macro?) and log if it's happen.   
+    // let mut data  = match manager.0.lock() {
+    //     Ok(guard) => guard,
+    //     Err(poisoned) => poisoned.into_inner()
+    // };
+    //manager.0.lock().unwrap().add_pool(&key, pool)?;
+
+    let mut mgr = rec_pois!(manager.0);
+    mgr.add_pool(&key, pool)?;
 
     Ok(key)
 }

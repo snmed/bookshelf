@@ -6,10 +6,12 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::sync::{Arc, Mutex};
+use std::{sync::{Arc, Mutex}, fs::File};
 
 use books::{models::Book, BookManager};
 use commands::BookManagerState;
+use log::{debug, error, trace, info, warn, LevelFilter};
+use simplelog::{CombinedLogger, TermLogger, WriteLogger, Config, TerminalMode, ColorChoice};
 use tauri::State;
 
 use crate::commands::create_book_db;
@@ -28,6 +30,21 @@ fn greet(name: &str) -> String {
 }
 
 fn main() {
+
+    // Todo: Move initialization into own function and make it configurable with env vars.
+    CombinedLogger::init(
+        vec![
+            TermLogger::new(LevelFilter::Trace, Config::default(), TerminalMode::Mixed, ColorChoice::Auto),
+            WriteLogger::new(LevelFilter::Trace, Config::default(), File::create("my_rust_bin.log").unwrap())
+        ]
+    ).expect("Failed to initialize logger");
+ 
+    trace!("a trace example");
+    debug!("deboogging");
+    info!("such information");
+    warn!("o_O");
+    error!("boom");
+
     tauri::Builder::default()
         .manage(BookManagerState::default())
         .invoke_handler(tauri::generate_handler![greet, create_book_db])

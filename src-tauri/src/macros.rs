@@ -47,3 +47,21 @@ macro_rules! from_err {
         }
     };
 }
+/// Recovers from a poisoned mutex.
+/// ```
+/// let shared_data = Arc::new(Mutex::new(vec![1, 2, 3]));
+/// // -- snip --
+/// let data: Vec<i32> = rec_pois!(shared_data);
+/// data.push(42);
+/// // -- snip --
+/// ```
+/// Todo: Log recover of a poisoned mutex.
+#[macro_export]
+macro_rules! rec_pois {
+    ($lock:expr) => {
+        match $lock.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner()
+        }
+    };
+}
