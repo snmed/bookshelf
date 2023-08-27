@@ -24,17 +24,21 @@ impl<T: Send + ?Sized> InnerPool<T> {
     }
 }
 
-pub struct PoolManager<T: Send + ?Sized> {
-    creator: fn() -> Box<T>,
+pub trait Creator<T: Send + ?Sized> {        
+    fn create_item(&self) -> Box<T>;
+}
+
+pub struct PoolManager<T: Send + ?Sized, F: Creator<T>> {
+    creator: F,
     pool: InnerPool<T>,
 }
 
 
-impl<T: Send + ?Sized> PoolManager<T> {
-    pub fn new(min_pool: usize, creator: fn() -> Box<T>) -> PoolManager<T> {
+impl<T: Send + ?Sized, F: Creator<T>> PoolManager<T, F> {
+    pub fn new(min_pool: usize, creator: F) -> PoolManager<T,F> {
         let mut conns: Vec<Box<T>> = Vec::new();
         for _ in 0..min_pool {
-            conns.push(creator());
+            conns.push(creator.create_item());
         }
 
         Self {
@@ -47,12 +51,13 @@ impl<T: Send + ?Sized> PoolManager<T> {
         match self.pool.acquire() {
             Ok(p) => PoolItem(Some(p), InnerPool(Arc::clone(&self.pool.0), self.pool.1)),
             Err(_) => PoolItem(
-                Some((self.creator)()),
+                Some(self.creator.create_item()),
                 InnerPool(Arc::clone(&self.pool.0), self.pool.1),
             ),
         }
     }
 
+    #[allow(unused)]
     pub fn available_items(&self) -> usize {
         self.pool.0.lock().unwrap().len()
     }
@@ -83,13 +88,22 @@ impl<T: Send + ?Sized> Drop for PoolItem<T> {
 #[cfg(test)] 
 mod tests {
     use std::{thread, time::Duration, sync::Arc};
-    use super::PoolManager;
+    use super::{PoolManager, Creator};
+   
+
+    #[derive(Default)]
+    struct TestCreator;
+
+    impl Creator<String> for TestCreator {
+        fn create_item(&self) -> Box<String> {
+            Box::new("Just a test".to_owned())
+        }
+    }
+
 
     #[test]
     fn pool_test() {
-        let pool = Arc::new(PoolManager::new(5, || {            
-            Box::new("Just a test")
-        }));
+        let pool = Arc::new(PoolManager::new(5, TestCreator::default()));
       
         let mut handles = Vec::new();
         for i in 0..15 {

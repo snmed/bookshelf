@@ -3,60 +3,39 @@
 // Use of this source code is governed by an BSD-style
 // license that can be found in the LICENSE file.
 
+use std::os::unix::prelude::OsStrExt;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
-use tauri::State;
+use tauri::{api::dialog::blocking::FileDialogBuilder, State};
 
 use crate::books::models::{Book, BookError};
-use crate::books::{self, BookManager};
-
-// macro_rules! from_err_api {
-//     (@Internal $value:ident  $error:literal $code:literal ) => {
-//         Self {error: format!("{:?}", $error), code: $code }
-//     };
-//     (@Internal $value:ident  $code:literal ) => {
-//         Self {error: format!("{:?}", $value), code: $code }
-//     };
-//     // (@Internal $value:ident $other:expr ) => {
-//     //     $other
-//     // };
-//     (@Enum $value:ident $enum:pat $(if $pred:expr)* => $($to2:tt)*) => {
-//         $enum $(if $pred)* => from_err_api!(@Internal $value $($to)*)
-//     };
-//     ($from:ty,
-//         $($enum:pat $(if $pred:expr)* => $($to:tt)* ),+
-//     ) => {
-//         impl From<$from> for ApiError {
-//             fn from(value: $from) -> Self {
-//                match value {
-//                     $(
-//                         //$enum $(if $pred)* => from_err_api!(@Internal value $to)
-//                         from_err_api!(@Enum value $enum $(if $pred)* => $($to)* )
-//                     ),+
-//                 }
-//             }
-//         }
-//     };
-
-// }
+use crate::books::{self, BookManager, BookPool};
 
 macro_rules! from_err_api {
     ($code:literal) => {
-        ApiError {error: "Unspecified API Error".to_string(), code: $code }
+        ApiError {error: "".to_string(), code: $code }
     };
-    
+
     ($error:expr, $code:expr) => {
         ApiError {error: $error, code: $code }
-    };  
+    };
     ($from:ty, $($enum:pat $(if $pred:expr)* => $result:expr),* ) => {
         impl From<$from> for ApiError {
                     fn from(value: $from) -> Self {
-                    match value {
+                    let s = format!("{:?}", &value);
+                    let mut ae = match value {
                         $(
                             $enum $(if $pred)* => $result
                         ),*
+                    };
+
+                    if ae.error == "" {
+                        ae.error = s;
                     }
+
+                    ae
                 }
         }
     };
@@ -69,50 +48,28 @@ pub struct ApiError {
 }
 
 from_err_api!(BookError,
-    BookError::Generic(e) => from_err_api!(e, 5),
-    BookError::NotFound => from_err_api!(5), 
-    _ => Self {..Default::default()}
+    BookError::Generic(s) => from_err_api!(s, 40),
+    BookError::NotFound => from_err_api!(41),
+    BookError::DBError(e) => from_err_api!(e.to_string(),42),
+    BookError::EmptyAuthors => from_err_api!(43)
 );
 
-// from_err_api!(BookError,
-//     BookError::Generic(_) => 4,
-//     BookError::NotFound => 5,
-//     BookError::DBError(_) => 6,
-//     BookError::EmptyAuthors => 7
-// );
+from_err_api!(books::Error,
+    books::Error::PoolAlreadyAdded => from_err_api!(20),
+    books::Error::PoolNotFound => from_err_api!(21),
+    books::Error::CurrentPoolNotSet => from_err_api!(22),
+    books::Error::BookError(e) =>  e.into(),
+    books::Error::ConversionFailed => from_err_api!(23)
+);
 
-// from_err_api!(books::Error,
-//     books::Error::PoolAlreadyAdded => 1,
-//     books::Error::PoolNotFound => 2,
-//     books::Error::CurrentPoolNotSet => 3,
-//     books::Error::BookError(_) =>  {"sdfdsfdsf" 44},
-// );
+#[derive(Debug)]
+pub enum CommandError {
+    UserAborted,
+}
 
-// TODO: Create macro to simplify implementation
-// impl From<BookError> for ApiError {
-//     fn from(value: BookError) -> Self {
-//         // match value {
-//         //     books::models::BookError::Generic(_) => 4,
-//         //     books::models::BookError::NotFound => 5,
-//         //     books::models::BookError::DBError(_) => 6,
-//         //     books::models::BookError::EmptyAuthors => 7,
-//         // }
-//         Self { error: format!("{:?}", value), code: 25 }
-//     }
-// }
-
-// impl From<books::Error> for ApiError {
-//     fn from(value: books::Error) -> Self {
-//        match value {
-//             books::Error::PoolAlreadyAdded => Self { error: format!("{:?}", value), code: 25 },
-//             books::Error::PoolNotFound => Self { error: format!("{:?}", value), code: 25 },
-//             books::Error::CurrentPoolNotSet => Self { error: format!("{:?}", value), code: 25 },
-//             //books::Error::BookError(be) => be.into(),
-//             _ => Self { error: format!("{:?}", value), code: 25 }
-//         }
-
-//     }
-// }
+from_err_api!(CommandError,
+    CommandError::UserAborted => from_err_api!(1)
+);
 
 type Result<T = (), E = ApiError> = std::result::Result<T, E>;
 
@@ -126,32 +83,30 @@ type Result<T = (), E = ApiError> = std::result::Result<T, E>;
 pub struct BookManagerState(Arc<Mutex<BookManager>>);
 
 #[tauri::command]
-pub async fn create_book_db(path: String, manager: State<'_, BookManagerState>) -> Result<String> {
-    let mut db = {
-        let d = manager.0.lock().unwrap().get_current_pool().unwrap();
-        d
-    };
+pub async fn create_book_db(manager: State<'_, BookManagerState>) -> Result<String> {
+    let mut path = FileDialogBuilder::new()
+        .add_filter("DB", &[".db"])
+        .save_file()
+        .ok_or(CommandError::UserAborted)?;
 
-    let mut b = Book::default();
-    db.add_book(&mut b).unwrap();
+    let pool = BookPool::new_sqlite_pool(&path)?;
 
-    println!("HELLO FROM MY API {}", path);
-
-    Ok("MyString".to_owned())
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::books::models::BookError;
-
-    use super::ApiError;
-
-    #[test]
-    fn bla() {
-        //let my: ApiError = BookError::NotFound.into();
-        let my: ApiError = BookError::Generic("Super Duper".to_string()).into();
-        println!(">>>>>>>>>>>>>>< {:?}", my);
-        println!("--> {:?}", from_err_api!("asdasdasdsad".to_owned(), 42));
-        println!("--> {:?}", from_err_api!("asdasdasdsad".to_owned(), 42));
+    if let Some(e) = path.extension() {
+        if e.to_ascii_lowercase() != "db" {
+            path.set_extension("db");
+        }
+    } else {
+        path.set_extension("db");
     }
+
+    let key: String = path
+        .file_name()
+        .expect("Invalid file path, should never happen.")
+        .to_string_lossy()
+        .into();
+
+    // TODO: Handle mutex poisoning (macro?) and log if it's happen.
+    manager.0.lock().unwrap().add_pool(&key, pool)?;
+
+    Ok(key)
 }

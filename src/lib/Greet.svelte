@@ -11,7 +11,7 @@
 
   async function create_book_db() {
     try {
-      await invoke('create_book_db', { path: '' });
+      console.log(await invoke('create_book_db'));
     } catch (e: unknown) {
       console.log(`Error: ${JSON.stringify(e)}`);
     }

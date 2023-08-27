@@ -1,9 +1,10 @@
 use std::collections::HashMap;
-
+use std::path::PathBuf;
 
 use self::models::{BookDB, BookError};
-use crate::pool::{PoolItem, PoolManager};
-use crate::{from_err};
+use self::store::SqliteStore;
+use crate::from_err;
+use crate::pool::{Creator, PoolItem, PoolManager};
 
 // Module declarations
 pub mod models;
@@ -15,12 +16,32 @@ pub enum Error {
     PoolNotFound,
     CurrentPoolNotSet,
     BookError(BookError),
+    ConversionFailed,
 }
 from_err!(Error, BookError, BookError);
 
 pub type Result<T = (), E = Error> = std::result::Result<T, E>;
+pub type BookPool = PoolManager<dyn BookDB, SqliteCreator>;
 
-pub type BookPool = PoolManager<Box<dyn BookDB>>;
+pub struct SqliteCreator {
+    path: String,
+}
+
+impl Creator<dyn BookDB> for SqliteCreator {
+    fn create_item(&self) -> Box<dyn BookDB> {
+        Box::new(SqliteStore::new(self.path.as_str()).expect("Failed to create SqliteStore"))
+    }
+}
+
+impl BookPool {
+    pub fn new_sqlite_pool(path: &PathBuf) -> Result<BookPool> {
+        let db_file = path.to_str().ok_or(Error::ConversionFailed)?.to_owned();
+        // Ensure we can read and write file
+        let _ = SqliteStore::new(&db_file)?;
+
+        Ok(BookPool::new(5, SqliteCreator { path: db_file }))
+    }
+}
 
 #[derive(Default)]
 pub struct BookManager {
@@ -30,7 +51,11 @@ pub struct BookManager {
 
 impl BookManager {
     pub fn add_pool<K: AsRef<str>>(&mut self, pool_name: K, pool: BookPool) -> Result {
-        todo!()
+        if self.book_db_pools.contains_key(pool_name.as_ref()) {
+            return Err(Error::PoolAlreadyAdded);
+        }
+        self.book_db_pools.insert(pool_name.as_ref().into(), pool);
+        Ok(())
     }
 
     pub fn remove_pool<T: AsRef<str>>(&mut self, pool_name: T) -> Option<BookPool> {
@@ -62,7 +87,7 @@ impl BookManager {
         self.book_db_pools.keys().map(|k| k.as_str()).collect()
     }
 
-    pub fn get_current_pool(&self) -> Result<PoolItem<Box<dyn BookDB>>> {
+    pub fn get_current_pool(&self) -> Result<PoolItem<dyn BookDB>> {
         match self.current.as_ref() {
             Some(s) => Ok(self
                 .book_db_pools
