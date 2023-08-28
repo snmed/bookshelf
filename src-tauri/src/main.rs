@@ -6,12 +6,20 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::{sync::{Arc, Mutex}, fs::File};
+use std::{
+    ffi::OsString,
+    fs::File,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
 use books::{models::Book, BookManager};
 use commands::BookManagerState;
-use log::{debug, error, trace, info, warn, LevelFilter};
-use simplelog::{CombinedLogger, TermLogger, WriteLogger, Config, TerminalMode, ColorChoice};
+use log::{debug, error, info, trace, warn, LevelFilter};
+use simplelog::{
+    ColorChoice, CombinedLogger, Config, ConfigBuilder, SharedLogger, TermLogger, TerminalMode,
+    WriteLogger,
+};
 use tauri::State;
 
 use crate::commands::create_book_db;
@@ -30,24 +38,66 @@ fn greet(name: &str) -> String {
 }
 
 fn main() {
+    setup_logging();
 
-    // Todo: Move initialization into own function and make it configurable with env vars.
-    CombinedLogger::init(
-        vec![
-            TermLogger::new(LevelFilter::Trace, Config::default(), TerminalMode::Mixed, ColorChoice::Auto),
-            WriteLogger::new(LevelFilter::Trace, Config::default(), File::create("my_rust_bin.log").unwrap())
-        ]
-    ).expect("Failed to initialize logger");
- 
-    trace!("a trace example");
-    debug!("deboogging");
-    info!("such information");
-    warn!("o_O");
-    error!("boom");
+    info!("starting bookshelf application");
 
     tauri::Builder::default()
         .manage(BookManagerState::default())
         .invoke_handler(tauri::generate_handler![greet, create_book_db])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+fn setup_logging() {
+    #[cfg(not(debug_assertions))]
+    let default_lvl: OsString = "Off".into();
+    #[cfg(debug_assertions)]
+    let default_lvl: OsString = "Debug".into();
+
+    let log_lvl = std::env::var_os("BOOKSHELF_LOG").unwrap_or(default_lvl);
+    let log_no_term = std::env::var_os("BOOKSHELF_LOG_NOTERM").unwrap_or("".into());
+    let log_file: PathBuf = std::env::var_os("BOOKSHELF_LOG_FILE")
+        .unwrap_or("".into())
+        .into();
+
+    let lvl = match log_lvl.to_str() {
+        Some(l) => match l.to_ascii_lowercase().as_str() {
+            "debug" => LevelFilter::Debug,
+            "trace" => LevelFilter::Trace,
+            "warn" => LevelFilter::Warn,
+            "info" => LevelFilter::Info,
+            "error" => LevelFilter::Error,
+            _ => LevelFilter::Off,
+        },
+        None => LevelFilter::Off,
+    };
+
+    if lvl != LevelFilter::Off {
+        let mut loggers: Vec<Box<dyn SharedLogger>> = Vec::new();
+        if log_no_term.is_empty() {
+            loggers.push(TermLogger::new(
+                lvl,
+                Config::default(),
+                TerminalMode::Mixed,
+                ColorChoice::Auto,
+            ));
+        }
+
+        if !log_file.as_os_str().is_empty() {
+            loggers.push(WriteLogger::new(
+                lvl,
+                ConfigBuilder::new().set_time_format_rfc3339().build(),
+                File::options()
+                    .append(true)
+                    .create(true)
+                    .open(log_file)
+                    .expect("Failed to create log file"),
+            ));
+        }
+
+        if !loggers.is_empty() {
+            CombinedLogger::init(loggers).expect("Failed to initalize loggers");
+        }
+    }
 }

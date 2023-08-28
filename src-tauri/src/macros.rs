@@ -58,10 +58,16 @@ macro_rules! from_err {
 /// Todo: Log recover of a poisoned mutex.
 #[macro_export]
 macro_rules! rec_pois {
-    ($lock:expr) => {
-        match $lock.lock() {
-            Ok(guard) => guard,
-            Err(poisoned) => poisoned.into_inner()
+    ($lock:expr) => {        
+        match $lock.lock() {            
+            Ok(guard) => {
+                log::info!("WITHIN MACRO");
+                guard
+            },
+            Err(poisoned) =>  {
+                log::error!("recovering from poisened mutex");
+                poisoned.into_inner()
+            }
         }
     };
 }

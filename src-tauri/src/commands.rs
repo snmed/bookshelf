@@ -7,6 +7,7 @@ use std::os::unix::prelude::OsStrExt;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+use log::debug;
 use serde::Serialize;
 use tauri::{api::dialog::blocking::FileDialogBuilder, State};
 
@@ -85,6 +86,8 @@ pub struct BookManagerState(Arc<Mutex<BookManager>>);
 
 #[tauri::command]
 pub async fn create_book_db(manager: State<'_, BookManagerState>) -> Result<String> {
+    debug!("calling create_book_db command");   
+
     let mut path = FileDialogBuilder::new()
         .add_filter("DB", &[".db"])
         .save_file()
@@ -105,13 +108,6 @@ pub async fn create_book_db(manager: State<'_, BookManagerState>) -> Result<Stri
         .expect("Invalid file path, should never happen.")
         .to_string_lossy()
         .into();
-
-    // TODO: Handle mutex poisoning (macro?) and log if it's happen.   
-    // let mut data  = match manager.0.lock() {
-    //     Ok(guard) => guard,
-    //     Err(poisoned) => poisoned.into_inner()
-    // };
-    //manager.0.lock().unwrap().add_pool(&key, pool)?;
 
     let mut mgr = rec_pois!(manager.0);
     mgr.add_pool(&key, pool)?;
