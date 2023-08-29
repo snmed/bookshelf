@@ -19,6 +19,15 @@
       },
       "dialog": {
         "all": true
+      },
+      "path": {
+        "all": true
+      },
+      "fs":{                
+        "exists": true,
+        "readDir": true,
+        "readFile": true,
+        "scope": ["$RESOURCE/resources/*"]
       }
     },
     "bundle": {
@@ -31,6 +40,9 @@
         "icons/128x128@2x.png",
         "icons/icon.icns",
         "icons/icon.ico"
+      ],
+      "resources": [
+        "resources/*"
       ]
     },
     "security": {

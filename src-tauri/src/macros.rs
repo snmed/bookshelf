@@ -61,7 +61,6 @@ macro_rules! rec_pois {
     ($lock:expr) => {        
         match $lock.lock() {            
             Ok(guard) => {
-                log::info!("WITHIN MACRO");
                 guard
             },
             Err(poisoned) =>  {

@@ -1,0 +1,18 @@
+{
+    "en": {
+        "labels.settings": "Settings",
+        "labels.german": "Deutsch",
+        "labels.english": "English",
+
+
+        "messages.books.import-success": "The book {book} was successully imported."
+
+    },
+    "de": {
+        "labels.settings": "Einstellungen",
+        "labels.german": "Deutsch",
+        "labels.english": "English",
+
+        "messages.books.import-success": "Das Buch {book} wurde erfolgreich importiert."
+    }
+}
