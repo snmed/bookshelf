@@ -3,17 +3,16 @@
 // Use of this source code is governed by an BSD-style
 // license that can be found in the LICENSE file.
 
-use std::os::unix::prelude::OsStrExt;
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use log::debug;
 use serde::Serialize;
 use tauri::{api::dialog::blocking::FileDialogBuilder, State};
 
-use crate::books::models::{Book, BookError};
+use crate::books::models::BookError;
 use crate::books::{self, BookManager, BookPool};
 use crate::rec_pois;
+use crate::settings::UserSettings;
 
 macro_rules! from_err_api {
     ($code:literal) => {
@@ -74,6 +73,21 @@ from_err_api!(CommandError,
 );
 
 type Result<T = (), E = ApiError> = std::result::Result<T, E>;
+
+/*******************************************************
+ *
+ * Settings API
+ *
+ ******************************************************/ 
+ pub struct UserSettingsAPI(pub Arc<Mutex<UserSettings>>);
+
+ impl Default for UserSettingsAPI {
+    fn default() -> Self {        
+        Self(Arc::new(Mutex::new(UserSettings::from_user_dir())))
+    }
+}
+
+
 
 /*******************************************************
  *

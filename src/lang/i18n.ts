@@ -5,9 +5,7 @@
 
 import { resolveResource } from '@tauri-apps/api/path';
 import { readTextFile } from '@tauri-apps/api/fs';
-import { register, init } from 'svelte-i18n';
-
-
+import { register, init, waitLocale } from 'svelte-i18n';
 
 let messages: { [key: string]: any } | undefined;
 async function loadMessageFile() {
@@ -21,7 +19,9 @@ async function loadMessageFile() {
 register('en', async () => (await loadMessageFile())!['en']);
 register('de', async () => (await loadMessageFile())!['de']);
 
-init({
+export default async () => {
+  await init({
     fallbackLocale: 'en',
-    initialLocale:  'en'
-});
+    initialLocale: 'en',
+  });
+};

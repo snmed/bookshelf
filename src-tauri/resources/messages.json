@@ -1,18 +1,24 @@
 {
-    "en": {
-        "labels.settings": "Settings",
-        "labels.german": "Deutsch",
-        "labels.english": "English",
-
-
-        "messages.books.import-success": "The book {book} was successully imported."
-
+  "en": {
+    "labels": {
+      "settings": "Settings",
+      "german": "Deutsch",
+      "english": "English"
     },
-    "de": {
-        "labels.settings": "Einstellungen",
-        "labels.german": "Deutsch",
-        "labels.english": "English",
 
-        "messages.books.import-success": "Das Buch {book} wurde erfolgreich importiert."
-    }
+    "messages": {
+        "books-import-success": "The book {book} was successully imported."
+    }    
+  },
+  "de": {
+    "labels": {
+      "settings": "Einstellungen",
+      "german": "Deutsch",
+      "english": "English"
+    },
+
+    "messages": {
+        "books-import-success": "Das Buch {book} wurde erfolgreich importiert."
+    }    
+  }
 }

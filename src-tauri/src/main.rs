@@ -14,15 +14,15 @@ use std::{
 };
 
 use books::{models::Book, BookManager};
-use commands::BookManagerState;
+use commands::{BookManagerState, UserSettingsAPI};
 use log::{debug, error, info, trace, warn, LevelFilter};
 use simplelog::{
     ColorChoice, CombinedLogger, Config, ConfigBuilder, SharedLogger, TermLogger, TerminalMode,
     WriteLogger,
 };
-use tauri::State;
+use tauri::{Manager, State, WindowEvent};
 
-use crate::commands::create_book_db;
+use crate::{commands::create_book_db, settings::UserSettings};
 
 // Module declarations
 mod books;
@@ -37,6 +37,17 @@ fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
+#[tauri::command]
+fn shutdown(app_handle: tauri::AppHandle, settings: State<'_, UserSettingsAPI>) {
+    info!("shutting down application");
+    let s = rec_pois!(settings.0);
+    match s.save_to_user_dir() {
+        Ok(_) => debug!("successfully saved user settings"),
+        Err(e) => error!("failed to save user settings {:?}", e)
+    }
+    app_handle.exit(0)
+}
+
 fn main() {
     setup_logging();
 
@@ -44,7 +55,8 @@ fn main() {
 
     tauri::Builder::default()
         .manage(BookManagerState::default())
-        .invoke_handler(tauri::generate_handler![greet, create_book_db])
+        .manage(UserSettingsAPI::default())
+        .invoke_handler(tauri::generate_handler![greet, create_book_db, shutdown])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

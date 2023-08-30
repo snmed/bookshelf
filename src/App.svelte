@@ -1,6 +1,18 @@
 <script lang="ts">
   import Greet from './lib/Greet.svelte';
-  import './lang/i18n.ts';
+  import init from './lang/i18n';
+  import { window } from '@tauri-apps/api';
+  import { invoke } from '@tauri-apps/api/tauri';
+  import { TauriEvent } from '@tauri-apps/api/event';
+
+  window.getCurrent().listen(TauriEvent.WINDOW_CLOSE_REQUESTED, async () => {
+    console.log('shutdown event received');
+    await invoke('shutdown');
+
+  });
+
+  let ready = false;
+  init().then(() => (ready = true));
 </script>
 
 <main class="container">
@@ -24,10 +36,11 @@
   </div>
 
   <p>Click on the Tauri, Vite, and Svelte logos to learn more.</p>
-
-  <div class="row">
-    <Greet />
-  </div>
+  {#if ready}
+    <div class="row">
+      <Greet />
+    </div>
+  {/if}
 </main>
 
 <style>
@@ -39,8 +52,8 @@
     filter: drop-shadow(0 0 2em #ff3e00);
   }
 
-  .logo.app > img{
+  .logo.app > img {
     width: 96px;
-    height: 96px;    
+    height: 96px;
   }
 </style>

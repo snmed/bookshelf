@@ -1,6 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/tauri';
-  import { _, locale } from 'svelte-i18n';
+  import { _, locale, locales } from 'svelte-i18n';
 
 
   let name = '';
@@ -29,6 +29,11 @@
   <button on:click={create_book_db}>Create DB</button>
   <p>{greetMsg}</p>
   <p>{$locale}</p>
-  <p>{$_('labels.settings')}</p>
+  <p>{$_('labels.settings')}</p> 
+  <p>{$_('messages.books-import-success', {values: { book: 'Star Wars'}})}</p> 
+  <button on:click={() => locale.set('de')}>Set German</button>
+  {#each $locales as l}
+    <p>{l}</p>
+  {/each}
 
 </div>

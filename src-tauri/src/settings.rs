@@ -4,6 +4,7 @@
 // license that can be found in the LICENSE file.
 
 use directories::UserDirs;
+use log::{debug, warn};
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, File},
@@ -58,6 +59,7 @@ impl Default for UserSettings {
 
 impl UserSettings {
     pub fn from_file<T: AsRef<Path>>(path: T) -> Result<UserSettings> {
+        debug!("loading user settings from {:?}", path.as_ref().as_os_str());
         let f = File::open(path)?;
         let buf = BufReader::new(f);
         Ok(serde_json::from_reader(buf)?)
@@ -66,14 +68,20 @@ impl UserSettings {
     pub fn from_file_or_default<T: AsRef<Path>>(path: T) -> UserSettings {
         match UserSettings::from_file(path) {
             Ok(u) => u,
-            Err(_) => UserSettings::default(),
+            Err(e) => {
+                warn!("failed to load user settings from file {:?}", e);
+                UserSettings::default()
+            },
         }
     }
 
     pub fn from_user_dir() -> UserSettings {
         match get_user_settings_path() {
             Ok(p) => UserSettings::from_file_or_default(p),
-            Err(_) => UserSettings::default(),
+            Err(e) => {
+                warn!("failed to get user config directory {:?}", e);
+                 UserSettings::default()
+                },
         }
     }
 
