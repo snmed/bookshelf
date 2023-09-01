@@ -22,7 +22,10 @@ use simplelog::{
 };
 use tauri::{Manager, State, WindowEvent};
 
-use crate::{commands::create_book_db, settings::UserSettings};
+use crate::{
+    commands::{create_book_db, current_lang},
+    settings::UserSettings,
+};
 
 // Module declarations
 mod books;
@@ -40,11 +43,7 @@ fn greet(name: &str) -> String {
 #[tauri::command]
 fn shutdown(app_handle: tauri::AppHandle, settings: State<'_, UserSettingsAPI>) {
     info!("shutting down application");
-    let s = rec_pois!(settings.0);
-    match s.save_to_user_dir() {
-        Ok(_) => debug!("successfully saved user settings"),
-        Err(e) => error!("failed to save user settings {:?}", e)
-    }
+    let _ = settings.save_settings();
     app_handle.exit(0)
 }
 
@@ -56,7 +55,12 @@ fn main() {
     tauri::Builder::default()
         .manage(BookManagerState::default())
         .manage(UserSettingsAPI::default())
-        .invoke_handler(tauri::generate_handler![greet, create_book_db, shutdown])
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            create_book_db,
+            shutdown,
+            current_lang
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

@@ -5,14 +5,14 @@
 
 use std::sync::{Arc, Mutex};
 
-use log::debug;
+use log::{debug, error};
 use serde::Serialize;
 use tauri::{api::dialog::blocking::FileDialogBuilder, State};
 
 use crate::books::models::BookError;
 use crate::books::{self, BookManager, BookPool};
 use crate::rec_pois;
-use crate::settings::UserSettings;
+use crate::settings::{UserSettings, SettingsError};
 
 macro_rules! from_err_api {
     ($code:literal) => {
@@ -78,16 +78,78 @@ type Result<T = (), E = ApiError> = std::result::Result<T, E>;
  *
  * Settings API
  *
- ******************************************************/ 
- pub struct UserSettingsAPI(pub Arc<Mutex<UserSettings>>);
+ ******************************************************/
+pub struct UserSettingsAPI(pub Arc<Mutex<UserSettings>>);
 
- impl Default for UserSettingsAPI {
-    fn default() -> Self {        
+impl Default for UserSettingsAPI {
+    fn default() -> Self {
         Self(Arc::new(Mutex::new(UserSettings::from_user_dir())))
     }
 }
 
+impl UserSettingsAPI {
+    pub fn get_current_lang(&self) -> String {
+        let settings = rec_pois!(self.0);
+        settings.lang.to_owned()
+    }
 
+    pub fn set_current_lang<T>(&self, lang: T)
+    where
+        T: AsRef<str>,
+    {
+        let mut settings = rec_pois!(self.0);
+        settings.lang = lang.as_ref().to_owned()
+    }
+
+    pub fn add_history<T>(&self, path: T)
+    where
+        T: AsRef<str>,
+    {
+        if path.as_ref().is_empty() {
+            return;
+        }
+
+        let mut settings = rec_pois!(self.0);
+        let p = path.as_ref().to_string();
+        if !settings.book_history.contains(&p) {
+            settings.book_history.push(p)
+        }
+        settings.book_history.sort();
+    }
+
+    pub fn remove_history<T>(&self, path: T)
+    where
+        T: AsRef<str>,
+    {
+        let mut settings = rec_pois!(self.0);
+        let p = path.as_ref().to_string();
+        settings.book_history.retain(|h| *h != p);
+    }
+
+    pub fn get_history(&self) -> Vec<String> {
+        let s = rec_pois!(self.0);
+        s.book_history.clone()
+    }
+
+    pub fn save_settings(&self) -> Result<(), SettingsError> {
+        let s = rec_pois!(self.0);
+        match s.save_to_user_dir() {
+            Ok(_) => {
+                debug!("successfully saved user settings");
+                Ok(())
+            }
+            Err(e) => {
+                error!("failed to save user settings {:?}", e);
+                Err(e)
+            }
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn current_lang(settings: State<'_, UserSettingsAPI>) -> Result<String> {
+    Ok(settings.get_current_lang())
+}
 
 /*******************************************************
  *
@@ -99,8 +161,8 @@ type Result<T = (), E = ApiError> = std::result::Result<T, E>;
 pub struct BookManagerState(Arc<Mutex<BookManager>>);
 
 #[tauri::command]
-pub async fn create_book_db(manager: State<'_, BookManagerState>) -> Result<String> {
-    debug!("calling create_book_db command");   
+pub async fn create_book_db(manager: State<'_, BookManagerState>, settings: State<'_, UserSettingsAPI>) -> Result<String> {
+    debug!("calling create_book_db command");
 
     let mut path = FileDialogBuilder::new()
         .add_filter("DB", &[".db"])
@@ -125,6 +187,8 @@ pub async fn create_book_db(manager: State<'_, BookManagerState>) -> Result<Stri
 
     let mut mgr = rec_pois!(manager.0);
     mgr.add_pool(&key, pool)?;
+
+    settings.add_history(path.to_str().unwrap_or_default());
 
     Ok(key)
 }
