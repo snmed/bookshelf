@@ -5,8 +5,8 @@
 
 import { resolveResource } from '@tauri-apps/api/path';
 import { readTextFile } from '@tauri-apps/api/fs';
-import { invoke } from '@tauri-apps/api/tauri';
 import { register, init } from 'svelte-i18n';
+import { currentLang } from '@/api';
 
 let messages: { [key: string]: any } | undefined;
 async function loadMessageFile() {
@@ -22,7 +22,7 @@ register('de', async () => (await loadMessageFile())!['de']);
 
 export default async () => {
   try {
-    const userLang = (await invoke('current_lang')) as string;
+    const userLang = await currentLang();
     await init({
       fallbackLocale: 'en',
       initialLocale: userLang,

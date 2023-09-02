@@ -55,7 +55,6 @@ macro_rules! from_err {
 /// data.push(42);
 /// // -- snip --
 /// ```
-/// Todo: Log recover of a poisoned mutex.
 #[macro_export]
 macro_rules! rec_pois {
     ($lock:expr) => {        

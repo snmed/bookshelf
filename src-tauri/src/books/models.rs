@@ -28,7 +28,6 @@ macro_rules! sort_desc {
 
 }
 
-
 /// All known error for the books module.
 /// Probably use crate `thiserror` as soon as familiar
 /// enough with error handling and implementation.
@@ -43,6 +42,10 @@ pub enum BookError {
     DBError(Box<dyn std::error::Error>),
     /// An error if authors is empty.
     EmptyAuthors,
+    InvalidBook {
+        field: String,
+        reason: String,
+    },
 }
 
 impl Error for BookError {}
@@ -58,6 +61,9 @@ impl Display for BookError {
             BookError::NotFound => write!(f, "Did not find item with given id"),
             BookError::DBError(e) => write!(f, "Database error: {}", *e),
             BookError::EmptyAuthors => write!(f, "Book requires at least one author"),
+            BookError::InvalidBook { field, reason } => {
+                write!(f, "invalid field: {}, reason: {}", field, reason)
+            }
         }
     }
 }
@@ -83,8 +89,6 @@ impl From<&str> for SortOrder {
         SortOrder::from(value.to_string())
     }
 }
-
-
 
 /// SortDescriptor describes a column and which sort order to use.
 #[derive(Debug, Deserialize, Serialize)]
@@ -182,18 +186,21 @@ impl SearchConfig<ConfigNew> {
     /// also `use_take` were specified. Example:
     /// If `use_take(20).use_skip_page(3)` were called,
     /// first 60 items will be skipped.
+    #[allow(dead_code)]
     pub fn use_skip_page(mut self, skip: u64) -> Self {
         self.skip = Some(skip);
         self
     }
 
     /// Specifies how many items should be returned.
+    #[allow(dead_code)]
     pub fn use_take(mut self, take: u64) -> Self {
         self.take = Some(take);
         self
     }
 
     /// Define how items should be sorted.
+    #[allow(dead_code)]
     pub fn use_sort(mut self, sort: Vec<SortDescriptor>) -> Self {
         self.sort = Some(sort);
         self
@@ -227,10 +234,8 @@ pub trait BookDB: Send {
     fn update_book(&mut self, book: &mut Book) -> Result<()>;
     fn delete_book(&mut self, book: &Book) -> Result<()>;
     fn delete_book_by_id(&mut self, id: i64) -> Result<()>;
-    fn fetch_books(
-        &mut self,
-        search: SearchConfig<ConfigInitialized>,
-    ) -> Result<StoreResult<Book>>;
+    fn fetch_books(&mut self, search: SearchConfig<ConfigInitialized>)
+        -> Result<StoreResult<Book>>;
 
     fn get_tags(&mut self, search: SearchConfig<ConfigInitialized>) -> Result<StoreResult<String>>;
     fn get_authors(
@@ -240,6 +245,7 @@ pub trait BookDB: Send {
 }
 
 /// A book representation for the bookshelf application.
+/// IDEA (learning purpose): Create a derive macro to create a validation function.
 #[derive(Debug, Default, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Book {
     pub authors: Vec<String>,
@@ -258,8 +264,6 @@ pub struct Book {
     pub created: DateTime<Utc>,
     pub updated: DateTime<Utc>,
 }
-
-
 
 #[cfg(test)]
 mod tests {

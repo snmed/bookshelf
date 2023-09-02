@@ -8,11 +8,12 @@ use std::sync::{Arc, Mutex};
 use log::{debug, error};
 use serde::Serialize;
 use tauri::{api::dialog::blocking::FileDialogBuilder, State};
+use tauri::{AppHandle, Manager};
 
-use crate::books::models::BookError;
-use crate::books::{self, BookManager, BookPool};
+use crate::books::models::{self, Book, BookError, SearchConfig, StoreResult};
+use crate::books::{self, BookManager, BookManagerEvent, BookPool, BOOK_MANAGER_EVENTS};
 use crate::rec_pois;
-use crate::settings::{UserSettings, SettingsError};
+use crate::settings::{SettingsError, UserSettings};
 
 macro_rules! from_err_api {
     ($code:literal) => {
@@ -52,7 +53,8 @@ from_err_api!(BookError,
     BookError::Generic(s) => from_err_api!(s, 40),
     BookError::NotFound => from_err_api!(41),
     BookError::DBError(e) => from_err_api!(e.to_string(),42),
-    BookError::EmptyAuthors => from_err_api!(43)
+    BookError::EmptyAuthors => from_err_api!(43),
+    BookError::InvalidBook{ field: _, reason: _} => from_err_api!(44)
 );
 
 from_err_api!(books::Error,
@@ -61,6 +63,10 @@ from_err_api!(books::Error,
     books::Error::CurrentPoolNotSet => from_err_api!(22),
     books::Error::BookError(e) =>  e.into(),
     books::Error::ConversionFailed => from_err_api!(23)
+);
+
+from_err_api!(tauri::Error,
+    e => from_err_api!(format!("{:?}",e), 11)
 );
 
 #[derive(Debug)]
@@ -148,7 +154,28 @@ impl UserSettingsAPI {
 
 #[tauri::command]
 pub async fn current_lang(settings: State<'_, UserSettingsAPI>) -> Result<String> {
+    debug!("calling current_lang command");
     Ok(settings.get_current_lang())
+}
+
+#[tauri::command]
+pub async fn get_history(settings: State<'_, UserSettingsAPI>) -> Result<Vec<String>> {
+    debug!("calling get_history command");
+    Ok(settings.get_history())
+}
+
+#[tauri::command]
+pub async fn remove_history(path: String, settings: State<'_, UserSettingsAPI>) -> Result {
+    debug!("calling remove_history command");
+    settings.remove_history(path);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn set_lang(lang: String, settings: State<'_, UserSettingsAPI>) -> Result {
+    debug!("calling set_lang command");
+    settings.set_current_lang(lang);
+    Ok(())
 }
 
 /*******************************************************
@@ -161,7 +188,88 @@ pub async fn current_lang(settings: State<'_, UserSettingsAPI>) -> Result<String
 pub struct BookManagerState(Arc<Mutex<BookManager>>);
 
 #[tauri::command]
-pub async fn create_book_db(manager: State<'_, BookManagerState>, settings: State<'_, UserSettingsAPI>) -> Result<String> {
+pub async fn set_current_db(
+    db: String,
+    manager: State<'_, BookManagerState>,
+    app: AppHandle,
+) -> Result {
+    debug!("calling set_current_db command with param: {}", db);
+    let mut m = rec_pois!(manager.0);
+    m.set_current_pool(&db)?;
+
+    app.emit_all(BOOK_MANAGER_EVENTS, BookManagerEvent::CurrentDBChanged(db))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn fetch_book(
+    search: SearchConfig<models::ConfigInitialized>,
+    manager: State<'_, BookManagerState>,
+) -> Result<StoreResult<Book>> {
+    debug!("calling fetch_book command with params: {:?}", search);
+    let m = rec_pois!(manager.0);
+    let result = m.get_current_pool()?.fetch_books(search)?;
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn update_book(mut book: Book, manager: State<'_, BookManagerState>) -> Result<Book> {
+    debug!("calling update_book command with book: {:?}", book);
+    let m = rec_pois!(manager.0);
+    m.get_current_pool()?.update_book(&mut book)?;
+    Ok(book)
+}
+
+#[tauri::command]
+pub async fn delete_book(id: i64, manager: State<'_, BookManagerState>) -> Result {
+    debug!("calling delete_book command with id: {:?}", id);
+    let m = rec_pois!(manager.0);
+    m.get_current_pool()?.delete_book_by_id(id)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn add_book(mut book: Book, manager: State<'_, BookManagerState>) -> Result<i64> {
+    debug!("calling add_book command with book: {:?}", book);
+    let m = rec_pois!(manager.0);
+    m.get_current_pool()?.add_book(&mut book)?;
+    Ok(book.id)
+}
+
+#[tauri::command]
+pub async fn get_book(id: i64, manager: State<'_, BookManagerState>) -> Result<Book> {
+    debug!("calling get_book command with id: {}", id);
+    let m = rec_pois!(manager.0);
+    Ok(m.get_current_pool()?.get_book(id)?)
+}
+
+#[tauri::command]
+pub async fn close_db(manager: State<'_, BookManagerState>, app: AppHandle) -> Result {
+    debug!("calling close_db command");
+    let mut m = rec_pois!(manager.0);
+    let current = m.current_pool_name()?;
+
+    m.remove_pool(current.clone());
+
+    let db = m.get_pools().first().unwrap_or(&"").to_string();
+    m.set_current_pool(&db)?;
+
+    app.emit_all(BOOK_MANAGER_EVENTS, BookManagerEvent::CurrentDBChanged(db))?;
+    app.emit_all(
+        BOOK_MANAGER_EVENTS,
+        BookManagerEvent::OpenDBChanged(m.get_pools().iter().map(|s| s.to_string()).collect()),
+    )?;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn create_book_db(
+    manager: State<'_, BookManagerState>,
+    settings: State<'_, UserSettingsAPI>,
+    app: AppHandle,
+) -> Result<String> {
     debug!("calling create_book_db command");
 
     let mut path = FileDialogBuilder::new()
@@ -189,6 +297,11 @@ pub async fn create_book_db(manager: State<'_, BookManagerState>, settings: Stat
     mgr.add_pool(&key, pool)?;
 
     settings.add_history(path.to_str().unwrap_or_default());
+
+    app.emit_all(
+        BOOK_MANAGER_EVENTS,
+        BookManagerEvent::OpenDBChanged(mgr.get_pools().iter().map(|s| s.to_string()).collect()),
+    )?;
 
     Ok(key)
 }

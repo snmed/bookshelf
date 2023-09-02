@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use serde::{Deserialize, Serialize};
+
 use self::models::{BookDB, BookError};
 use self::store::SqliteStore;
 use crate::from_err;
@@ -70,8 +72,11 @@ impl BookManager {
         }
     }
 
-    pub fn is_current_pool_set(&self) -> bool {
-        self.current.is_some()
+    pub fn current_pool_name(&self) -> Result<String> {
+        match &self.current {
+            Some(s) => Ok(s.clone()),
+            None => Err(Error::CurrentPoolNotSet),
+        }
     }
 
     pub fn set_current_pool<T: AsRef<str>>(&mut self, pool_name: T) -> Result {
@@ -97,4 +102,14 @@ impl BookManager {
             None => Err(Error::CurrentPoolNotSet),
         }
     }
+}
+
+
+pub const BOOK_MANAGER_EVENTS: &str = "book-manager-event";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", content = "content")]
+pub enum BookManagerEvent {
+    CurrentDBChanged(String),
+    OpenDBChanged(Vec<String>)
 }

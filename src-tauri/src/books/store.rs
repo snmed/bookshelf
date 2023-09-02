@@ -101,6 +101,7 @@ impl BookDB for SqliteStore {
     /// TODO: Write a unit test to ensure functionality.
     fn add_book(&mut self, book: &mut Book) -> Result<()> {
         let tx = self.conn.transaction()?;
+        validate_book(book)?;
 
         let mut books_stmt = tx.prepare(r#"INSERT INTO books (cover_img, description, isbn, lang, title, sub_title, publisher, publish_date, created, updated)
         VALUES (:img, :desc, :isbn, :lang , :title, :subt, :pub, :pubd, unixepoch(), unixepoch())"#)?;
@@ -379,6 +380,16 @@ fn convert_timestamp(timestamp: i64) -> Result<DateTime<Utc>, BookError> {
             "Invalid timestamp conversion".to_owned(),
         )),
     }
+}
+
+fn validate_book(book: &Book) -> Result<(), BookError> {
+    if book.title == "" || book.lang == "" || book.isbn == "" || book.authors.is_empty() {
+        return Err(BookError::InvalidBook {
+            field: String::from("title isbn lang authors"),
+            reason: String::from("empty value is not valid"),
+        });
+    }
+    Ok(())
 }
 
 struct QueryBuilder<'a> {

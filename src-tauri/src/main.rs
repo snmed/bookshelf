@@ -6,26 +6,15 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::{
-    ffi::OsString,
-    fs::File,
-    path::PathBuf,
-    sync::{Arc, Mutex},
-};
+use std::{ffi::OsString, fs::File, path::PathBuf};
 
-use books::{models::Book, BookManager};
 use commands::{BookManagerState, UserSettingsAPI};
-use log::{debug, error, info, trace, warn, LevelFilter};
+use log::{info, LevelFilter};
 use simplelog::{
     ColorChoice, CombinedLogger, Config, ConfigBuilder, SharedLogger, TermLogger, TerminalMode,
     WriteLogger,
 };
-use tauri::{Manager, State, WindowEvent};
-
-use crate::{
-    commands::{create_book_db, current_lang},
-    settings::UserSettings,
-};
+use tauri::State;
 
 // Module declarations
 mod books;
@@ -57,9 +46,19 @@ fn main() {
         .manage(UserSettingsAPI::default())
         .invoke_handler(tauri::generate_handler![
             greet,
-            create_book_db,
             shutdown,
-            current_lang
+            commands::create_book_db,
+            commands::current_lang,
+            commands::set_lang,
+            commands::remove_history,
+            commands::get_history,
+            commands::set_current_db,
+            commands::close_db,
+            commands::get_book,
+            commands::add_book,
+            commands::delete_book,
+            commands::update_book,
+            commands::fetch_book
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
