@@ -1,11 +1,15 @@
 import { defineConfig } from "vite";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
+import postcss from './postcss.config.js';
 import sveltePreprocess from "svelte-preprocess";
 import path from "node:path";
 
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [svelte()],
+  css : {
+    postcss
+  },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   // prevent vite from obscuring rust errors

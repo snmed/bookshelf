@@ -1,23 +1,18 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/tauri';
-  import { listen } from '@tauri-apps/api/event'
+
   import { _, locale, locales } from 'svelte-i18n';
-  import { getHistory, setCurrentDB } from '@/api';
+  import { getHistory, setCurrentDB, getBook, currentBookDB, openBookDB } from '@/api';
   import { onDestroy } from 'svelte';
   let name = '';
   let greetMsg = '';
 
-  const unlisten = listen('book-manager-event', (p) => {
-    console.log("received event", p)
-  });
-
-  onDestroy(async () => (await unlisten)());
-
+ 
   async function greet() {
     // Learn more about Tauri commands at https://tauri.app/v1/guides/features/command
     //greetMsg = await invoke('greet', { name });
     try {
-      await setCurrentDB(name);  
+      await getBook( parseInt(name));  
     } catch (error) {
         console.error("failed to set current DB", error);
     }
@@ -34,6 +29,10 @@
 </script>
 
 <div>
+  <p>{$currentBookDB}</p>
+  <p>{#each $openBookDB as db,i }
+    <div>{db} - {i}</div>
+  {/each}</p>
   <form class="row" on:submit|preventDefault={greet}>
     <input id="greet-input" placeholder="Enter a name..." bind:value={name} />
     <button type="submit">Greet</button>
@@ -57,4 +56,11 @@
       <div>{name} - {i}</div>
     {/each}
   {/await}
+
+  <select class="select select-bordered w-full max-w-xs">
+    <option disabled selected>Who shot first?</option>
+    <option>Han Solo</option>
+    <option>Greedo</option>
+  </select>
+  <button class="btn btn-primary">Button</button>
 </div>

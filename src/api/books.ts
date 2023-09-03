@@ -3,49 +3,55 @@
 // Use of this source code is governed by an BSD-style
 // license that can be found in the LICENSE file.
 
-import { writable, readonly, type Readable } from "svelte/store";
-import { invoke, type EventPayload } from "./utils";
-import { listen, type Event } from "@tauri-apps/api/event";
+import { writable, readonly, type Readable } from 'svelte/store';
+import { invoke, type EventPayload } from './utils';
+import { listen, type Event } from '@tauri-apps/api/event';
+import { Book } from '@/models/books';
 
-const SET_CURRENT_SB = 'set_current_db';
+const SET_CURRENT_DB = 'set_current_db';
+const GET_BOOK = 'get_book';
+const BOOK_MANAGER_EVENT = 'book-manager-event';
 
-const bookStore = writable<BookStore>({
-  databases: [] as string[],
-  current: undefined
-}, (set, updater) => {  
-  const unlisten = listen('book-manager-event', (event: Event<EventPayload<string|string[]>> ) => {
-    console.log("received event", event);
-  })
+const bookDatabases = writable<string[]>([]);
+const currentDatabase = writable<string | undefined>();
 
-  updater(state => {
-    console.log("state updated", state);
-    return state;
-  });
-  
+export const openBookDB = readonly(bookDatabases);
+export const currentBookDB = readonly(currentDatabase);
 
-  return async () => (await unlisten)();   
-}); 
-
-
-const booksDB = writable<string[]>([]);
-const currentDB = writable<string|undefined>();
-
-// export const bookStore: BookStore = {
-//   databases: readonly(booksDB),
-//   current: readonly(currentDB)
-// };
-
-
-export interface BookStore {
-  databases: string[];
-  current: string|undefined;
-}
-
-
-
+listen(BOOK_MANAGER_EVENT, (event: Event<EventPayload<string | string[]>>) => {
+  console.debug(
+    `received book manager event ${event.payload.type}`,
+    event.payload.content,
+  );
+  switch (event.payload.type) {
+    case 'CurrentDBChanged':
+      currentDatabase.update((db) => {
+        if (
+          db !== event.payload.content &&
+          typeof event.payload.content === 'string'
+        ) {
+          return event.payload.content;
+        }
+        return db;
+      });
+      break;
+    case 'OpenDBChanged':
+      if (Array.isArray(event.payload.content)) {
+        bookDatabases.set(event.payload.content);
+      }
+      break;
+    default:
+      break;
+  }
+});
 
 export async function setCurrentDB(db: string): Promise<void> {
-    // TODO: Show error notification
-    await invoke(SET_CURRENT_SB, { args: {db} });
-  }
-  
+  // TODO: Show error notification
+  await invoke(SET_CURRENT_DB, { args: { db } });
+}
+
+export async function getBook(id: number): Promise<void> {
+  const result = await invoke<Partial<Book>>(GET_BOOK, { args: { id } });
+  const book = new Book(result.result)
+  console.log('Received book', JSON.parse(JSON.stringify(book)));
+}
