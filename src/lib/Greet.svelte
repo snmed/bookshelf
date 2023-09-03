@@ -34,10 +34,10 @@
     <div>{db} - {i}</div>
   {/each}</p>
   <form class="row" on:submit|preventDefault={greet}>
-    <input id="greet-input" placeholder="Enter a name..." bind:value={name} />
-    <button type="submit">Greet</button>
+    <input class="input input-bordered  w-full max-w-xs" id="greet-input" placeholder="Enter a name..." bind:value={name} />
+    <button  class="btn" type="submit">Greet</button>
   </form>
-  <button on:click={create_book_db}>Create DB</button>
+  <button class="btn" on:click={create_book_db}>Create DB</button>
   <p>{greetMsg}</p>
   <p>{$locale}</p>
   <p>{$_('labels.settings')}</p>
@@ -62,5 +62,5 @@
     <option>Han Solo</option>
     <option>Greedo</option>
   </select>
-  <button class="btn btn-primary">Button</button>
+  <button class="btn btn-secondary">Button</button>
 </div>
