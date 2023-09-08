@@ -107,6 +107,19 @@ impl UserSettingsAPI {
         settings.lang = lang.as_ref().to_owned()
     }
 
+    pub fn get_theme(&self) -> String {
+        let settings = rec_pois!(self.0);
+        settings.theme.to_owned()
+    }
+
+    pub fn set_theme<T>(&self, theme: T)
+    where
+        T: AsRef<str>,
+    {
+        let mut settings = rec_pois!(self.0);
+        settings.theme = theme.as_ref().to_owned()
+    }
+
     pub fn add_history<T>(&self, path: T)
     where
         T: AsRef<str>,
@@ -153,12 +166,6 @@ impl UserSettingsAPI {
 }
 
 #[tauri::command]
-pub async fn current_lang(settings: State<'_, UserSettingsAPI>) -> Result<String> {
-    debug!("calling current_lang command");
-    Ok(settings.get_current_lang())
-}
-
-#[tauri::command]
 pub async fn get_history(settings: State<'_, UserSettingsAPI>) -> Result<Vec<String>> {
     debug!("calling get_history command");
     Ok(settings.get_history())
@@ -177,6 +184,26 @@ pub async fn set_lang(lang: String, settings: State<'_, UserSettingsAPI>) -> Res
     settings.set_current_lang(lang);
     Ok(())
 }
+
+#[tauri::command]
+pub async fn current_lang(settings: State<'_, UserSettingsAPI>) -> Result<String> {
+    debug!("calling current_lang command");
+    Ok(settings.get_current_lang())
+}
+
+#[tauri::command]
+pub async fn set_theme(theme: String, settings: State<'_, UserSettingsAPI>) -> Result {
+    debug!("calling set_theme command");
+    settings.set_theme(theme);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn current_theme(settings: State<'_, UserSettingsAPI>) -> Result<String> {
+    debug!("calling current_theme command");
+    Ok(settings.get_theme())
+}
+
 
 /*******************************************************
  *

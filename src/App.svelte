@@ -1,6 +1,7 @@
 <script lang="ts">
   import Greet from './lib/Greet.svelte';
   import init from './lang/i18n';
+  import { useThemeStore } from '@/api';
   import { window } from '@tauri-apps/api';
   import { invoke } from '@tauri-apps/api/tauri';
   import { TauriEvent } from '@tauri-apps/api/event';
@@ -8,11 +9,15 @@
   window.getCurrent().listen(TauriEvent.WINDOW_CLOSE_REQUESTED, async () => {
     console.log('shutdown event received');
     await invoke('shutdown');
-
   });
 
+  const { reloadTheme } = useThemeStore();
+
   let ready = false;
-  init().then(() => (ready = true));
+  (async () => {
+    await init();
+    await reloadTheme();
+  })().then(() => (ready = true));
 </script>
 
 <main class="container">

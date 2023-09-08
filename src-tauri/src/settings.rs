@@ -44,8 +44,12 @@ pub type Result<T = (), E = SettingsError> = result::Result<T, E>;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct UserSettings {
+    #[serde(default)]
     pub lang: String,
+    #[serde(default)]
     pub book_history: Vec<String>,
+    #[serde(default)]
+    pub theme: String,
 }
 
 impl Default for UserSettings {
@@ -53,6 +57,7 @@ impl Default for UserSettings {
         Self {
             lang: "en".to_owned(),
             book_history: Default::default(),
+            theme: "dark".to_owned()
         }
     }
 }
@@ -130,6 +135,7 @@ mod tests {
                 "/abc/xyz/mybooks.db".to_string(),
                 "/home/elrond/books/magic.db".to_string(),
             ],
+            theme: "dark".to_owned()
         };
 
         testee.save_to_file(&dest)?;

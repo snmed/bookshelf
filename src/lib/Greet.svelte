@@ -1,11 +1,39 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/tauri';
-
+  import { Themes, useThemeStore } from '@/api';
   import { _, locale, locales } from 'svelte-i18n';
   import { getHistory, setCurrentDB, getBook, currentBookDB, openBookDB } from '@/api';
   import { onDestroy } from 'svelte';
+  
+  const themeStore = useThemeStore();
+  
+  
   let name = '';
   let greetMsg = '';
+
+  let current: Themes = Themes.Dark;
+  const unsubscribe = themeStore.subscribe(t => {
+    console.log(`>>>>>>>>>>>>>>>>>> SUBSCRIPTION`, t);
+      current = t;
+  });
+
+  onDestroy(unsubscribe);
+
+  const switchTheme = async () => {
+      themeStore.setTheme(current == Themes.Dark ? Themes.Light : Themes.Dark);
+  };
+
+  let currentTheme = '';
+  $: switch (current) {
+    case Themes.Dark:
+      currentTheme = 'Dark';
+      break;
+      case Themes.Light:
+      currentTheme = 'Light';
+      break;
+    default:
+       currentTheme = '';
+  }
 
  
   async function greet() {
@@ -57,10 +85,13 @@
     {/each}
   {/await}
 
+  <p>Current Theme: {current}</p>
+  <p>Current Theme: {currentTheme}</p>
+
   <select class="select select-bordered w-full max-w-xs">
     <option disabled selected>Who shot first?</option>
     <option>Han Solo</option>
     <option>Greedo</option>
   </select>
-  <button class="btn btn-secondary">Button</button>
+  <button class="btn btn-secondary" on:click={switchTheme}>Switch Theme</button>
 </div>
