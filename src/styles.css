@@ -1,6 +1,9 @@
+@import "icons.css";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+
 
 :root {
   /* font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
@@ -18,7 +21,7 @@
   -webkit-text-size-adjust: 100%;
 }
 
-.container {
+/* .container {
   margin: 0;
   padding-top: 10vh;
   display: flex;
@@ -37,7 +40,7 @@
 .row {
   display: flex;
   justify-content: center;
-}
+} */
 
 /*
 

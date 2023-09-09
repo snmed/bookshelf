@@ -4,6 +4,7 @@
   import { _, locale, locales } from 'svelte-i18n';
   import { getHistory, setCurrentDB, getBook, currentBookDB, openBookDB } from '@/api';
   import { onDestroy } from 'svelte';
+  import Icon from  '@/components/Icon.svelte';
   
   const themeStore = useThemeStore();
   
@@ -87,7 +88,7 @@
 
   <p>Current Theme: {current}</p>
   <p>Current Theme: {currentTheme}</p>
-
+  <Icon name="cog-solid" class="super"></Icon>
   <select class="select select-bordered w-full max-w-xs">
     <option disabled selected>Who shot first?</option>
     <option>Han Solo</option>
@@ -95,3 +96,10 @@
   </select>
   <button class="btn btn-secondary" on:click={switchTheme}>Switch Theme</button>
 </div>
+
+<style>
+  :global(.super) {
+    width: 256px;
+    height: 256px;
+  }
+</style>
