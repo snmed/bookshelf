@@ -11,3 +11,12 @@ but also to prevent to buy a book more than once. ;-)
 - [Svelte](https://svelte.dev/)
 - [Sqlite](https://www.sqlite.org/index.html)
 - [VS Codium](https://vscodium.com/)
+
+
+## Known Issues
+
+Currently, starting app on a Linux System with proprietary Nvidia drivers will show a blank app. To remedy such behaviour, add following environment variable:
+
+```bash
+WEBKIT_DISABLE_DMABUF_RENDERER=1 
+```

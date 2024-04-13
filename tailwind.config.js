@@ -2,7 +2,6 @@
 import daisyui from 'daisyui';
 import daisyThemes from 'daisyui/src/theming/themes';
 
-console.log(">>>>>>>>>>", daisyThemes);
 export default {
 
   content: [

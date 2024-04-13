@@ -1,10 +1,12 @@
 <script lang="ts">
-  import type { MenuItem } from "@/models/menu";
-
 // Copyright © 2023 Sandro Dallo
 //
 // Use of this source code is governed by an BSD-style
 // license that can be found in the LICENSE file.
+
+import type { MenuItem } from "@/models/menu";
+
+
 
 export let menus: MenuItem = [];
 
