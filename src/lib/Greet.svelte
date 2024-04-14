@@ -5,9 +5,11 @@
   import { getHistory, setCurrentDB, getBook, currentBookDB, openBookDB } from '@/api';
   import { onDestroy } from 'svelte';
   import Icon from  '@/components/Icon.svelte';
+  import { useAppContext } from '@/contexts/app';
   
   const themeStore = useThemeStore();
   
+  const { context } = useAppContext();
   
   let name = '';
   let greetMsg = '';
@@ -85,7 +87,7 @@
       <div>{name} - {i}</div>
     {/each}
   {/await}
-
+  <button class="btn btn-secondary" on:click={() => context.toggleMenu()}>Switch Menu</button>
   <p>Current Theme: {current}</p>
   <p>Current Theme: {currentTheme}</p>
   <Icon name="cog-solid" class="super"></Icon>

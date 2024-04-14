@@ -69,6 +69,10 @@ from_err_api!(tauri::Error,
     e => from_err_api!(format!("{:?}",e), 11)
 );
 
+from_err_api!(SettingsError ,
+    e => from_err_api!(format!("{:?}",e), 30)
+);
+
 #[derive(Debug)]
 pub enum CommandError {
     UserAborted,
@@ -182,6 +186,7 @@ pub async fn remove_history(path: String, settings: State<'_, UserSettingsAPI>) 
 pub async fn set_lang(lang: String, settings: State<'_, UserSettingsAPI>) -> Result {
     debug!("calling set_lang command");
     settings.set_current_lang(lang);
+    settings.save_settings()?;
     Ok(())
 }
 
@@ -195,6 +200,7 @@ pub async fn current_lang(settings: State<'_, UserSettingsAPI>) -> Result<String
 pub async fn set_theme(theme: String, settings: State<'_, UserSettingsAPI>) -> Result {
     debug!("calling set_theme command");
     settings.set_theme(theme);
+    settings.save_settings()?;
     Ok(())
 }
 

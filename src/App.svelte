@@ -21,9 +21,10 @@
 
 {#await ready()}
   Loading ...
-{:then _} 
-  <Main />  
+{:then _}
+  <Main />
 {/await}
 
 <style>
+  
 </style>

@@ -3,18 +3,38 @@
   //
   // Use of this source code is governed by an BSD-style
   // license that can be found in the LICENSE file.
-  import SideMenu from '@/components/SideMenu.svelte';
+
+  import { useAppContext, type AppContext } from '@/contexts/app';
+  import { writable, readonly } from 'svelte/store';
+  import SplitLayout from '@/components/layouts/SplitLayout.svelte';
+  import SideMenu from '@/components/layouts/SideMenu.svelte';
   import Greet from '@/lib/Greet.svelte';
-  import SplitLayout from '@/components/layout/SplitLayout.svelte';
+
+  const { setContext } = useAppContext();
+
+
+  let isMenuOpen = true;
+
+  let menuOpen = writable(isMenuOpen);
+  const toggleMenu = (show?: boolean) => {
+    isMenuOpen = show ?? !isMenuOpen
+    menuOpen.set(isMenuOpen);
+  }
+
+  const appContext: AppContext = {
+    menuOpen: readonly(menuOpen),
+    toggleMenu
+  };
+
+  setContext(appContext);
 </script>
 
 <div class="bs-main-layout h-full w-full">
-  <!-- <SideMenu />
-    <div class="bs-main-container">
-        <Greet />
-    </div>    -->
+  <SplitLayout isOpen={isMenuOpen} autoOpen={true}>
+    <SideMenu slot="aside"></SideMenu>
 
-  <SplitLayout isOpen={true} autoOpen={true}></SplitLayout>
+    <Greet></Greet>
+  </SplitLayout>
 </div>
 
 <style>

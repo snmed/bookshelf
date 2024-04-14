@@ -3,7 +3,9 @@
     "labels": {
       "settings": "Settings",
       "german": "Deutsch",
-      "english": "English"
+      "english": "English",
+      "dark-theme": "Dark Theme",
+      "light-theme": "Light Theme"
     },
 
     "messages": {
@@ -14,7 +16,9 @@
     "labels": {
       "settings": "Einstellungen",
       "german": "Deutsch",
-      "english": "English"
+      "english": "English",
+      "dark-theme": "Dunkles Theme",
+      "light-theme": "Helles Theme"
     },
 
     "messages": {
