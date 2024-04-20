@@ -39,7 +39,7 @@
   <!-- Top Menu -->
   <ul class="menu bg-base-200">
     <li>
-      <a href="#top" title={$menuOpen ? '' : $_('labels.library')}>
+      <a href="/" title={$menuOpen ? '' : $_('labels.library')}>
         <svg
           xmlns="http://www.w3.org/2000/svg"
           class="h-5 w-5"

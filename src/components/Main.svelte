@@ -48,7 +48,7 @@
   >
     <SideMenu slot="aside"></SideMenu>
 
-    <Greet></Greet>
+    <slot />
   </SplitLayout>
 </div>
 
