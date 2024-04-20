@@ -6,7 +6,10 @@
       "english": "English",
       "dark-theme": "Dark",
       "light-theme": "Light",
-      "library": "Library"
+      "library": "Library",
+      "language": "Language",
+      "theme": "UI Theme",
+      "menu-auto-open": "Menu Auto Open"
     },
 
     "messages": {
@@ -20,7 +23,10 @@
       "english": "English",
       "dark-theme": "Dunkel",
       "light-theme": "Hell",
-      "library": "Bibliothek"
+      "library": "Bibliothek",
+      "language": "Sprache",
+      "theme": "UI Farbschema",
+      "menu-auto-open": "Automatisch Menu expandieren"
     },
 
     "messages": {

@@ -6,7 +6,7 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::{ffi::OsString, fs::File, path::PathBuf};
+use std::{env, ffi::OsString, fs::File, path::PathBuf};
 
 use commands::{BookManagerState, UserSettingsAPI};
 use log::{info, LevelFilter};
@@ -37,6 +37,12 @@ fn shutdown(app_handle: tauri::AppHandle, settings: State<'_, UserSettingsAPI>) 
 }
 
 fn main() {
+    // This is a fix to solve a problem on linux with propritary Nvidia driver.
+    // Without it, only a blank screen will be shown.
+    if cfg!(target_os = "linux") {
+        env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    }
+
     setup_logging();
 
     info!("starting bookshelf application");
@@ -62,7 +68,9 @@ fn main() {
             commands::set_theme,
             commands::current_theme,
             commands::get_menu_expanded,
-            commands::set_menu_expanded
+            commands::set_menu_expanded,
+            commands::set_menu_auto_expand,
+            commands::get_menu_auto_expand
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

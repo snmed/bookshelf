@@ -1,7 +1,8 @@
-<!-- <script lang="ts">
-  import init from './lang/i18n';
+<script lang="ts">
+  import '@/styles.css';
+  import init from '@/lang/i18n';
   import Main from '@/components/Main.svelte';
-  import { useThemeStore } from '@/api';
+  import { useSettingsApi } from '@/api/settings';
   import { window } from '@tauri-apps/api';
   import { invoke } from '@tauri-apps/api/tauri';
   import { TauriEvent } from '@tauri-apps/api/event';
@@ -11,16 +12,18 @@
     await invoke('shutdown');
   });
 
-  const { reloadTheme } = useThemeStore();
+  const { reloadTheme, reloadLang, reloadAutoExpand } = useSettingsApi();
 
   const ready = async () => {
-    await init();
-    await reloadTheme();
+    const all = [init(), reloadLang(), reloadTheme(), reloadAutoExpand()];
+    await Promise.all(all);
   };
 </script>
 
 {#await ready()}
   Loading ...
 {:then _}
-  <Main />
-{/await} -->
+  <Main>
+    <slot />
+  </Main>
+{/await}

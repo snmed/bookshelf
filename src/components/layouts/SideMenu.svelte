@@ -5,7 +5,7 @@
   // license that can be found in the LICENSE file.
   import Icon from '@/components/Icon.svelte';
   import { Icons } from '@/models/icons';
-  import { Themes, useThemeStore } from '@/api';
+  import { Themes, useSettingsApi } from '@/api/settings';
   import { onDestroy } from 'svelte';
   import { _ } from 'svelte-i18n';
   import { useAppContext } from '@/contexts/app';
@@ -14,13 +14,13 @@
   const {
     context: { menuOpen, toggleMenu },
   } = useAppContext();
-  const themeStore = useThemeStore();
+  const settingsApi = useSettingsApi();
 
   const unsubscribers: Unsubscriber[] = [];
 
   let current: Themes = Themes.Dark;
   unsubscribers.push(
-    themeStore.subscribe((t) => {
+    settingsApi.theme.subscribe((t) => {
       current = t;
     }),
   );
@@ -39,7 +39,7 @@
   <!-- Top Menu -->
   <ul class="menu bg-base-200">
     <li>
-      <a href="#top" title={$menuOpen ? '' : $_('labels.library')}>
+      <a href="/" title={$menuOpen ? '' : $_('labels.library')}>
         <svg
           xmlns="http://www.w3.org/2000/svg"
           class="h-5 w-5"
@@ -67,7 +67,7 @@
         href="self"
         title={$menuOpen ? '' : themeBtnTitle}
         on:click|preventDefault={() =>
-          themeStore.setTheme(
+          settingsApi.setTheme(
             current === Themes.Dark ? Themes.Light : Themes.Dark,
           )}
       >
@@ -88,14 +88,14 @@
       <a
         role="button"
         tabindex="0"
-        href="self"
+        href="/settings"
         title={$menuOpen ? '' : $_('labels.settings')}
       >
         <Icon class="h-5 w-5" name={Icons.CogSolid}></Icon>
         <span class="label">{$_('labels.settings')}</span>
       </a>
     </li>
-    <li>
+    <li class="collapse-btn-item">
       <a
         role="button"
         tabindex="0"
@@ -133,12 +133,17 @@
       }
     }
 
-    .collapse-btn {
-      transform: rotate(270deg);
-      transition: transform 400ms ease;
+    .collapse-btn-item {
+      width: 52px;
+      align-self: end;
 
-      &.collapsed {
-        transform: rotate(90deg);
+      .collapse-btn {
+        transform: rotate(270deg);
+        transition: transform 400ms ease;
+
+        &.collapsed {
+          transform: rotate(90deg);
+        }
       }
     }
   }

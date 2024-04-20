@@ -42,8 +42,8 @@
 
 <style lang="postcss">
   .bs-split-layout {
-    --bs-split-layout-collapsed: 68px;
-    --bs-split-layout-open: 200px;
+    --bs-split-layout-collapsed: 4.25rem;
+    --bs-split-layout-open: 12.5rem;
     --bs-split-layout-animation-ms: 500ms;
 
     display: grid;
@@ -51,6 +51,7 @@
     transition: grid-template-columns var(--bs-split-layout-animation-ms) ease;
 
     .bs-split-layout-main {
+      padding: 1rem;
       overflow-y: auto;
     }
   }

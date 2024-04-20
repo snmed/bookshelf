@@ -108,6 +108,16 @@ impl UserSettingsAPI {
         settings.menu_expanded = menu_expanded
     }
 
+    pub fn get_menu_auto_expand(&self) -> bool {
+        let settings = rec_pois!(self.0);
+        settings.menu_auto_expand
+    }
+
+    pub fn set_menu_auto_expand(&self, menu_auto_expanded: bool) {
+        let mut settings = rec_pois!(self.0);
+        settings.menu_auto_expand = menu_auto_expanded
+    }
+
     pub fn get_current_lang(&self) -> String {
         let settings = rec_pois!(self.0);
         settings.lang.to_owned()
@@ -230,8 +240,25 @@ pub async fn set_menu_expanded(expanded: bool, settings: State<'_, UserSettingsA
 
 #[tauri::command]
 pub async fn get_menu_expanded(settings: State<'_, UserSettingsAPI>) -> Result<bool> {
-    debug!("calling current_theme command");
+    debug!("calling get_menu_expanded command");
     Ok(settings.get_menu_expanded())
+}
+
+#[tauri::command]
+pub async fn set_menu_auto_expand(
+    auto_expand: bool,
+    settings: State<'_, UserSettingsAPI>,
+) -> Result {
+    debug!("calling set_menu_auto_expand command");
+    settings.set_menu_auto_expand(auto_expand);
+    settings.save_settings()?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_menu_auto_expand(settings: State<'_, UserSettingsAPI>) -> Result<bool> {
+    debug!("calling get_menu_auto_expand command");
+    Ok(settings.get_menu_auto_expand())
 }
 
 /*******************************************************
