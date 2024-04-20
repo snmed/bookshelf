@@ -23,7 +23,7 @@
       "path": {
         "all": true
       },
-      "fs":{                
+      "fs": {
         "exists": true,
         "readDir": true,
         "readFile": true,
@@ -41,9 +41,7 @@
         "icons/icon.icns",
         "icons/icon.ico"
       ],
-      "resources": [
-        "resources/*"
-      ]
+      "resources": ["resources/*"]
     },
     "security": {
       "csp": null

@@ -4,25 +4,27 @@
       "settings": "Settings",
       "german": "Deutsch",
       "english": "English",
-      "dark-theme": "Dark Theme",
-      "light-theme": "Light Theme"
+      "dark-theme": "Dark",
+      "light-theme": "Light",
+      "library": "Library"
     },
 
     "messages": {
-        "books-import-success": "The book {book} was successully imported."
-    }    
+      "books-import-success": "The book {book} was successully imported."
+    }
   },
   "de": {
     "labels": {
       "settings": "Einstellungen",
       "german": "Deutsch",
       "english": "English",
-      "dark-theme": "Dunkles Theme",
-      "light-theme": "Helles Theme"
+      "dark-theme": "Dunkel",
+      "light-theme": "Hell",
+      "library": "Bibliothek"
     },
 
     "messages": {
-        "books-import-success": "Das Buch {book} wurde erfolgreich importiert."
-    }    
+      "books-import-success": "Das Buch {book} wurde erfolgreich importiert."
+    }
   }
 }

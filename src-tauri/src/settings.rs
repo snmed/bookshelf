@@ -50,6 +50,8 @@ pub struct UserSettings {
     pub book_history: Vec<String>,
     #[serde(default)]
     pub theme: String,
+    #[serde(default)]
+    pub menu_expanded: bool,
 }
 
 impl Default for UserSettings {
@@ -57,7 +59,8 @@ impl Default for UserSettings {
         Self {
             lang: "en".to_owned(),
             book_history: Default::default(),
-            theme: "dark".to_owned()
+            theme: "dark".to_owned(),
+            menu_expanded: true,
         }
     }
 }
@@ -76,7 +79,7 @@ impl UserSettings {
             Err(e) => {
                 warn!("failed to load user settings from file {:?}", e);
                 UserSettings::default()
-            },
+            }
         }
     }
 
@@ -85,8 +88,8 @@ impl UserSettings {
             Ok(p) => UserSettings::from_file_or_default(p),
             Err(e) => {
                 warn!("failed to get user config directory {:?}", e);
-                 UserSettings::default()
-                },
+                UserSettings::default()
+            }
         }
     }
 
@@ -135,7 +138,8 @@ mod tests {
                 "/abc/xyz/mybooks.db".to_string(),
                 "/home/elrond/books/magic.db".to_string(),
             ],
-            theme: "dark".to_owned()
+            theme: "dark".to_owned(),
+            menu_expanded: true,
         };
 
         testee.save_to_file(&dest)?;

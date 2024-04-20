@@ -60,7 +60,9 @@ fn main() {
             commands::update_book,
             commands::fetch_book,
             commands::set_theme,
-            commands::current_theme
+            commands::current_theme,
+            commands::get_menu_expanded,
+            commands::set_menu_expanded
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

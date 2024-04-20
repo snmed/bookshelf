@@ -9,28 +9,43 @@
   import SplitLayout from '@/components/layouts/SplitLayout.svelte';
   import SideMenu from '@/components/layouts/SideMenu.svelte';
   import Greet from '@/lib/Greet.svelte';
+  import { setMenuExpanded, getMenuExpanded } from '@/api';
+  import { onMount } from 'svelte';
 
   const { setContext } = useAppContext();
 
-
   let isMenuOpen = true;
-
   let menuOpen = writable(isMenuOpen);
-  const toggleMenu = (show?: boolean) => {
-    isMenuOpen = show ?? !isMenuOpen
+  const toggleMenu = async (show?: boolean) => {
+    isMenuOpen = show ?? !isMenuOpen;
     menuOpen.set(isMenuOpen);
-  }
-
-  const appContext: AppContext = {
-    menuOpen: readonly(menuOpen),
-    toggleMenu
+    await setMenuExpanded(isMenuOpen);
   };
 
+  let collapsed = writable(isMenuOpen);
+  const appContext: AppContext = {
+    menuCollapsed: readonly(collapsed),
+    menuOpen: readonly(menuOpen),
+    toggleMenu,
+  };
+
+  function onCollapseChanged(e: CustomEvent<boolean>) {
+    collapsed.set(e.detail);
+  }
+
   setContext(appContext);
+
+  onMount(async () => {
+    await toggleMenu(await getMenuExpanded());
+  });
 </script>
 
 <div class="bs-main-layout h-full w-full">
-  <SplitLayout isOpen={isMenuOpen} autoOpen={true}>
+  <SplitLayout
+    isOpen={isMenuOpen}
+    autoOpen={false}
+    on:collapseChanged={onCollapseChanged}
+  >
     <SideMenu slot="aside"></SideMenu>
 
     <Greet></Greet>

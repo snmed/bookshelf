@@ -24,7 +24,3 @@
 {:then _}
   <Main />
 {/await}
-
-<style>
-  
-</style>
