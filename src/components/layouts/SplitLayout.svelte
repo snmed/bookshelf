@@ -51,6 +51,7 @@
     transition: grid-template-columns var(--bs-split-layout-animation-ms) ease;
 
     .bs-split-layout-main {
+      padding: 1rem;
       overflow-y: auto;
     }
   }

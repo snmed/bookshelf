@@ -46,7 +46,7 @@
     autoOpen={false}
     on:collapseChanged={onCollapseChanged}
   >
-    <SideMenu slot="aside"></SideMenu>
+    <SideMenu style="background: red" slot="aside"></SideMenu>
 
     <slot />
   </SplitLayout>
