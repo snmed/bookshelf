@@ -8,8 +8,7 @@
   import { writable, readonly } from 'svelte/store';
   import SplitLayout from '@/components/layouts/SplitLayout.svelte';
   import SideMenu from '@/components/layouts/SideMenu.svelte';
-  import Greet from '@/lib/Greet.svelte';
-  import { setMenuExpanded, getMenuExpanded } from '@/api';
+  import { setMenuExpanded, getMenuExpanded, useSettingsApi } from '@/api';
   import { onMount } from 'svelte';
 
   const { setContext } = useAppContext();
@@ -35,6 +34,8 @@
 
   setContext(appContext);
 
+  const { menuAutoExpand } = useSettingsApi();
+
   onMount(async () => {
     await toggleMenu(await getMenuExpanded());
   });
@@ -43,10 +44,10 @@
 <div class="bs-main-layout h-full w-full">
   <SplitLayout
     isOpen={isMenuOpen}
-    autoOpen={false}
+    autoOpen={$menuAutoExpand}
     on:collapseChanged={onCollapseChanged}
   >
-    <SideMenu style="background: red" slot="aside"></SideMenu>
+    <SideMenu slot="aside"></SideMenu>
 
     <slot />
   </SplitLayout>

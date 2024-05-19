@@ -5,7 +5,7 @@
   // license that can be found in the LICENSE file.
   import Icon from '@/components/Icon.svelte';
   import { Icons } from '@/models/icons';
-  import { Themes, useThemeStore } from '@/api';
+  import { Themes, useSettingsApi } from '@/api/settings';
   import { onDestroy } from 'svelte';
   import { _ } from 'svelte-i18n';
   import { useAppContext } from '@/contexts/app';
@@ -14,13 +14,13 @@
   const {
     context: { menuOpen, toggleMenu },
   } = useAppContext();
-  const themeStore = useThemeStore();
+  const settingsApi = useSettingsApi();
 
   const unsubscribers: Unsubscriber[] = [];
 
   let current: Themes = Themes.Dark;
   unsubscribers.push(
-    themeStore.subscribe((t) => {
+    settingsApi.theme.subscribe((t) => {
       current = t;
     }),
   );
@@ -67,7 +67,7 @@
         href="self"
         title={$menuOpen ? '' : themeBtnTitle}
         on:click|preventDefault={() =>
-          themeStore.setTheme(
+          settingsApi.setTheme(
             current === Themes.Dark ? Themes.Light : Themes.Dark,
           )}
       >

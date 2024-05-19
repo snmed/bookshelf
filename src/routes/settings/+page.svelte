@@ -1,47 +1,82 @@
 <script lang="ts">
+  import { useSettingsApi, type Language, type Theme } from '@/api/settings';
+  // Copyright © 2024 Sandro Dallo
+  //
+  // Use of this source code is governed by an BSD-style
+  // license that can be found in the LICENSE file.
+  import Page from '@/lib/Page.svelte';
+  import { onDestroy } from 'svelte';
   import { _ } from 'svelte-i18n';
+  import type { Unsubscriber } from 'svelte/motion';
+
+  const subscriptions: Unsubscriber[] = [];
+  const {
+    availableLanguages,
+    availableThemes,
+    lang,
+    theme,
+    setLang,
+    setTheme,
+    toggleMenuAutoExpand,
+    menuAutoExpand,
+  } = useSettingsApi();
+
+  let selectedLang: Language;
+  subscriptions.push(lang.subscribe((l) => (selectedLang = l)));
+
+  let selectedTheme: Theme;
+  subscriptions.push(
+    theme.subscribe(
+      (t) => (selectedTheme = availableThemes.find((th) => th.theme === t)),
+    ),
+  );
+
+  onDestroy(() => subscriptions.forEach((s) => s()));
 </script>
 
-<svelte:head>
-  <title>{$_('labels.settings')}</title>
-</svelte:head>
+<Page title={$_('labels.settings')}>
+  <label class="form-control w-full max-w-sm">
+    <div class="label">
+      <span class="label-text">{$_('labels.language')}</span>
+    </div>
+    <select
+      class="select select-bordered"
+      bind:value={selectedLang}
+      on:change={() => setLang(selectedLang)}
+    >
+      {#each availableLanguages as l}
+        <option value={l}>{$_(l.label)}</option>
+      {/each}
+    </select>
+  </label>
 
-<h1>{$_('labels.settings')}</h1>
-<fieldset>
-  <legend>{$_('labels.settings')}</legend>
-  <hr />
+  <label class="form-control w-full max-w-sm mt-5">
+    <div class="label">
+      <span class="label-text">{$_('labels.theme')}</span>
+    </div>
+    <select
+      class="select select-bordered"
+      bind:value={selectedTheme}
+      on:change={() => setTheme(selectedTheme.theme)}
+    >
+      {#each availableThemes as t}
+        <option value={t}>{$_(t.label)}</option>
+      {/each}
+    </select>
+  </label>
 
-  <input type="radio" id="kraken" name="monster" value="K" />
-  <label for="kraken">Kraken</label><br />
+  <div class="form-control w-full max-w-sm mt-5">
+    <label class="label cursor-pointer">
+      <span class="label-text">{$_('labels.menu-auto-open')}</span>
+      <input
+        type="checkbox"
+        class="toggle"
+        checked={$menuAutoExpand}
+        on:change={() => toggleMenuAutoExpand()}
+      />
+    </label>
+  </div>
+</Page>
 
-  <input type="radio" id="sasquatch" name="monster" value="S" />
-  <label for="sasquatch">Sasquatch</label><br />
-
-  <input type="radio" id="mothman" name="monster" value="M" />
-  <label for="mothman">Mothman</label>
-</fieldset>
-<div class="prose max-w-none">
-  <h2 class="mb-1">{$_('labels.settings')}</h2>
-  <hr />
-  <p>
-    For years parents have espoused the health benefits of eating garlic bread
-    with cheese to their children, with the food earning such an iconic status
-    in our culture that kids will often dress up as warm, cheesy loaf for
-    Halloween.
-  </p>
-  <p>
-    But a recent study shows that the celebrated appetizer may be linked to a
-    series of rabies cases springing up around the country.
-  </p>
-  <input
-    class="input underline"
-    id="greet-input"
-    placeholder="Enter a name..."
-  />
-  <input
-    type="text"
-    placeholder="Type here"
-    class="input input-bordered input-sm w-full max-w-xs"
-  />
-  <!-- ... -->
-</div>
+<style>
+</style>

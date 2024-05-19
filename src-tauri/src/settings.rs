@@ -52,6 +52,8 @@ pub struct UserSettings {
     pub theme: String,
     #[serde(default)]
     pub menu_expanded: bool,
+    #[serde(default)]
+    pub menu_auto_expand: bool,
 }
 
 impl Default for UserSettings {
@@ -61,6 +63,7 @@ impl Default for UserSettings {
             book_history: Default::default(),
             theme: "dark".to_owned(),
             menu_expanded: true,
+            menu_auto_expand: false,
         }
     }
 }

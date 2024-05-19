@@ -15,7 +15,7 @@
   </h2>
 </section>
 
-<style>
+<style lang="postcss">
   .welcome {
     background-color: blue;
   }

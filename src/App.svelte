@@ -1,4 +1,4 @@
-<script lang="ts">
+<!-- <script lang="ts">
   import init from './lang/i18n';
   import Main from '@/components/Main.svelte';
   import { useThemeStore } from '@/api';
@@ -23,4 +23,4 @@
   Loading ...
 {:then _}
   <Main />
-{/await}
+{/await} -->
