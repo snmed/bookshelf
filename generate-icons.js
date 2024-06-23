@@ -6,34 +6,34 @@ import https from 'node:https';
 import fs from 'node:fs';
 
 const iconSetName = 'clarity';
-const baseURL = `https://api.iconify.design/${iconSetName}.css?icons=`
+const baseURL = `https://api.iconify.design/${iconSetName}.css?icons=`;
 const targedFile = 'src/icons.css';
-const enumTargetFile = 'src/models/icons.ts'
+const enumTargetFile = 'src/models/icons.ts';
 
 // See https://icon-sets.iconify.design/clarity/ for available icons.
 const iconsNames = [
-    'cog-solid',
-    'moon-solid',
-    'moon-line',
-    'sun-solid',
-    'sun-line',
-    'angle-double-line'
+  'cog-solid',
+  'moon-solid',
+  'moon-line',
+  'sun-solid',
+  'sun-line',
+  'angle-double-line',
+  'plus-circle-line',
+  'times-circle-line',
+  'times-line',
+  'hard-disk-solid',
 ];
-
-
-
 
 console.log(`trying to download css for iconset ${iconSetName}...`);
 const file = fs.createWriteStream(targedFile);
 const request = https.get(`${baseURL}${iconsNames.join(',')}`, (response) => {
-    response.pipe(file);
+  response.pipe(file);
 
-    file.on('finish',() => {
-        file.close();
-        console.log('download css file successfully completed')
-    });
+  file.on('finish', () => {
+    file.close();
+    console.log('download css file successfully completed');
+  });
 });
-
 
 // Write interface file
 const efile = fs.createWriteStream(enumTargetFile);
@@ -50,12 +50,12 @@ efile.write(`
 export enum Icons {
 `);
 
-
 for (let index = 0; index < iconsNames.length; index++) {
-    const items = iconsNames[index].split('-');
-    const en = items.map(s => s.charAt(0).toUpperCase() + s.slice(1)).join("");
-    efile.write(`   ${en} = '${iconsNames[index]}'${index < iconsNames.length-1  ?  ',' : ''} \n`);   
+  const items = iconsNames[index].split('-');
+  const en = items.map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join('');
+  efile.write(
+    `   ${en} = '${iconsNames[index]}'${index < iconsNames.length - 1 ? ',' : ''} \n`,
+  );
 }
-efile.write('}')
+efile.write('}');
 efile.close();
-

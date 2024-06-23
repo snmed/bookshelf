@@ -3,6 +3,8 @@
 // Use of this source code is governed by an BSD-style
 // license that can be found in the LICENSE file.
 
+use std::io;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use log::{debug, error};
@@ -76,10 +78,14 @@ from_err_api!(SettingsError ,
 #[derive(Debug)]
 pub enum CommandError {
     UserAborted,
+    FileIOError(io::Error),
+    FileNotFound(String),
 }
 
 from_err_api!(CommandError,
-    CommandError::UserAborted => from_err_api!(1)
+    CommandError::UserAborted => from_err_api!(1),
+    CommandError::FileIOError(e) => from_err_api!(format!("{}", e), 2),
+    CommandError::FileNotFound(s) => from_err_api!(format!("file not found '{}'", s), 3)
 );
 
 type Result<T = (), E = ApiError> = std::result::Result<T, E>;
@@ -336,7 +342,9 @@ pub async fn close_db(manager: State<'_, BookManagerState>, app: AppHandle) -> R
     m.remove_pool(current.clone());
 
     let db = m.get_pools().first().unwrap_or(&"").to_string();
-    m.set_current_pool(&db)?;
+    if !db.is_empty() {
+        m.set_current_pool(&db)?;
+    }
 
     app.emit_all(BOOK_MANAGER_EVENTS, BookManagerEvent::CurrentDBChanged(db))?;
     app.emit_all(
@@ -360,8 +368,6 @@ pub async fn create_book_db(
         .save_file()
         .ok_or(CommandError::UserAborted)?;
 
-    let pool = BookPool::new_sqlite_pool(&path)?;
-
     if let Some(e) = path.extension() {
         if e.to_ascii_lowercase() != "db" {
             path.set_extension("db");
@@ -369,6 +375,33 @@ pub async fn create_book_db(
     } else {
         path.set_extension("db");
     }
+
+    open_or_create(path, manager, settings, app)
+}
+
+#[tauri::command]
+pub async fn open_book_db(
+    path: String,
+    manager: State<'_, BookManagerState>,
+    settings: State<'_, UserSettingsAPI>,
+    app: AppHandle,
+) -> Result<String> {
+    match Path::new(&path).try_exists() {
+        Ok(true) => (),
+        Ok(false) => return Err(CommandError::FileNotFound(path).into()),
+        Err(e) => return Err(CommandError::FileIOError(e).into()),
+    }
+
+    open_or_create(path.into(), manager, settings, app)
+}
+
+fn open_or_create(
+    path: PathBuf,
+    manager: State<'_, BookManagerState>,
+    settings: State<'_, UserSettingsAPI>,
+    app: AppHandle,
+) -> Result<String> {
+    let pool = BookPool::new_sqlite_pool(&path)?;
 
     let key: String = path
         .file_name()

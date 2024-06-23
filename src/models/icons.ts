@@ -14,5 +14,9 @@ export enum Icons {
    MoonLine = 'moon-line', 
    SunSolid = 'sun-solid', 
    SunLine = 'sun-line', 
-   AngleDoubleLine = 'angle-double-line' 
+   AngleDoubleLine = 'angle-double-line', 
+   PlusCircleLine = 'plus-circle-line', 
+   TimesCircleLine = 'times-circle-line', 
+   TimesLine = 'times-line', 
+   HardDiskSolid = 'hard-disk-solid' 
 }

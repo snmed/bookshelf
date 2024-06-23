@@ -9,9 +9,14 @@
       "library": "Library",
       "language": "Language",
       "theme": "UI Theme",
+      "create": "Create",
+      "open": "Open",
       "menu-auto-open": "Menu Auto Open"
     },
-
+    "hints": {
+      "create-db": "Create a new database.",
+      "open-db": "Open an existing database."
+    },
     "messages": {
       "books-import-success": "The book {book} was successully imported."
     }
@@ -26,9 +31,14 @@
       "library": "Bibliothek",
       "language": "Sprache",
       "theme": "UI Farbschema",
+      "create": "Anlegen",
+      "open": "Öffnen",
       "menu-auto-open": "Automatisch Menu expandieren"
     },
-
+    "hints": {
+      "create-db": "Neue Datenbank anlegen.",
+      "open-db": "Existierende Datenbank öffnen."
+    },
     "messages": {
       "books-import-success": "Das Buch {book} wurde erfolgreich importiert."
     }

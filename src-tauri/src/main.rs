@@ -54,6 +54,7 @@ fn main() {
             greet,
             shutdown,
             commands::create_book_db,
+            commands::open_book_db,
             commands::current_lang,
             commands::set_lang,
             commands::remove_history,
